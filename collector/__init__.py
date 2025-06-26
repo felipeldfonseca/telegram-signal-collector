@@ -1,0 +1,15 @@
+"""
+Telegram Signal Collector Package
+
+Um sistema automatizado para coletar sinais de trading do Telegram.
+"""
+
+__version__ = "1.0.0"
+__author__ = "Telegram Signal Collector"
+
+from .config import Config
+from .parser import SignalParser
+from .storage import Storage
+from .runner import Runner
+
+__all__ = ["Config", "SignalParser", "Storage", "Runner"] 
