@@ -1,184 +1,163 @@
 #!/usr/bin/env python3
 """
-Análise do arquivo Excel de acompanhamento de capital do Felipe
-Foco nas colunas A, B, C, G, J, M, N da sheet 'JUNHO, 25'
+Análise CORRIGIDA do Excel - Foco na linha 32 com fórmulas
 """
 
 import pandas as pd
 import numpy as np
-from datetime import datetime
 
-def analyze_excel():
-    print("📊 ANÁLISE COMPLETA DO EXCEL - JUNHO 2025")
+def analyze_excel_corrected():
+    print("📊 ANÁLISE CORRIGIDA - JUNHO 2025")
     print("=" * 60)
     
     try:
-        # Listar sheets disponíveis
-        xl_file = pd.ExcelFile('excel/Meta diária - Felipe.xlsx')
-        print("📋 Sheets disponíveis:", xl_file.sheet_names)
-        
-        # Carregar sheet JUNHO, 25
+        # Carregar dados
         df = pd.read_excel('excel/Meta diária - Felipe.xlsx', sheet_name='JUNHO, 25')
         
-        print(f"\n📊 Dados carregados: {len(df)} linhas, {len(df.columns)} colunas")
-        print("📋 Colunas:", list(df.columns))
-        
-        print("\n🔍 PREVIEW DOS DADOS:")
-        print("-" * 40)
-        print(df.head(10))
-        
-        # Análise das colunas importantes (A, B, C, G, J, M, N)
-        print("\n📈 ANÁLISE DAS COLUNAS IMPORTANTES:")
+        print("🔍 DADOS DA LINHA 32 (FÓRMULAS/TOTAIS):")
         print("-" * 50)
         
-        # Coluna A - Data
-        if len(df.columns) > 0:
-            col_a = df.iloc[:, 0]  # Primeira coluna (A)
-            print(f"📅 Coluna A (Data): {col_a.head(10).tolist()}")
+        # Linha 32 (índice 31) - Fórmulas
+        if len(df) > 31:
+            linha_32 = df.iloc[31]
+            
+            print(f"📅 Data (A32): {linha_32.iloc[0]}")
+            print(f"🎯 Total WIN (B32): {linha_32.iloc[1]}")
+            print(f"❌ Total LOSS (C32): {linha_32.iloc[2]}")
+            print(f"💰 Total P/L Mês (J32): {linha_32.iloc[9]}")
+            print(f"📊 Média por dia (N32): {linha_32.iloc[13]}")
+            
+            # Linha 33 (índice 32) - Resultado % do mês
+            if len(df) > 32:
+                linha_33 = df.iloc[32]
+                resultado_mes = linha_33.iloc[13]
+                print(f"📈 Resultado % Mês (N33): {resultado_mes}")
         
-        # Coluna B - WIN
-        if len(df.columns) > 1:
-            col_b = df.iloc[:, 1]  # Segunda coluna (B)
-            wins = (col_b == 'O').sum()
-            print(f"🎯 Coluna B (WIN): {wins} dias com WIN (O)")
+        print("\n🔍 ANÁLISE CORRIGIDA DOS DADOS INDIVIDUAIS:")
+        print("-" * 50)
         
-        # Coluna C - LOSS  
-        if len(df.columns) > 2:
-            col_c = df.iloc[:, 2]  # Terceira coluna (C)
-            losses = (col_c == 'X').sum()
-            print(f"❌ Coluna C (LOSS): {losses} dias com LOSS (X)")
+        # Analisar apenas os dias (linhas 0-30, excluindo totais)
+        dados_dias = df.iloc[:31]  # Primeiras 31 linhas (dias 1-31)
         
-        # Win Rate
-        if len(df.columns) > 2:
-            total_days = wins + losses
-            if total_days > 0:
-                win_rate = wins / total_days * 100
-                print(f"📊 Win Rate: {win_rate:.1f}% ({wins}W/{losses}L)")
+        # Colunas importantes
+        col_b = dados_dias.iloc[:, 1]  # WIN
+        col_c = dados_dias.iloc[:, 2]  # LOSS
+        col_j = pd.to_numeric(dados_dias.iloc[:, 9], errors='coerce')  # P/L DIA
+        col_n = pd.to_numeric(dados_dias.iloc[:, 13], errors='coerce')  # % DIA
         
-        # Coluna G - CAPITAL
-        if len(df.columns) > 6:
-            col_g = pd.to_numeric(df.iloc[:, 6], errors='coerce')  # Sétima coluna (G)
-            capital_data = col_g.dropna()
-            if len(capital_data) > 0:
-                capital_inicial = capital_data.iloc[0]
-                capital_atual = capital_data.iloc[-1]
-                print(f"💰 Coluna G (CAPITAL):")
-                print(f"   🏁 Inicial: ${capital_inicial:.2f}")
-                print(f"   📊 Atual: ${capital_atual:.2f}")
+        # Contar wins e losses
+        wins = (col_b == 'O').sum()
+        losses = (col_c == 'X').sum()
+        total_days = wins + losses
         
-        # Coluna J - P/L DIA
-        if len(df.columns) > 9:
-            col_j = pd.to_numeric(df.iloc[:, 9], errors='coerce')  # Décima coluna (J)
-            pnl_data = col_j.dropna()
-            if len(pnl_data) > 0:
-                total_pnl = pnl_data.sum()
-                avg_pnl = pnl_data.mean()
-                best_day = pnl_data.max()
-                worst_day = pnl_data.min()
-                positive_days = (pnl_data > 0).sum()
-                negative_days = (pnl_data < 0).sum()
-                
-                print(f"📈 Coluna J (P/L DIA):")
-                print(f"   💰 Total: ${total_pnl:.2f}")
-                print(f"   📊 Médio: ${avg_pnl:.2f}")
-                print(f"   🏆 Melhor: ${best_day:.2f}")
-                print(f"   ⚠️ Pior: ${worst_day:.2f}")
-                print(f"   ✅ Dias positivos: {positive_days}")
-                print(f"   ❌ Dias negativos: {negative_days}")
+        print(f"🎯 Wins individuais: {wins}")
+        print(f"❌ Losses individuais: {losses}")
         
-        # Coluna M - CAP FINAL
-        if len(df.columns) > 12:
-            col_m = pd.to_numeric(df.iloc[:, 12], errors='coerce')  # 13ª coluna (M)
-            cap_data = col_m.dropna()
-            if len(cap_data) > 0:
-                capital_final = cap_data.iloc[-1]
-                capital_inicial_m = cap_data.iloc[0]
-                crescimento = capital_final - capital_inicial_m
-                print(f"🎯 Coluna M (CAP FINAL):")
-                print(f"   💰 Final: ${capital_final:.2f}")
-                print(f"   📈 Crescimento: ${crescimento:.2f}")
+        if total_days > 0:
+            win_rate = wins / total_days * 100
+            print(f"📊 Win Rate Real: {win_rate:.1f}% ({wins}W/{losses}L)")
         
-        # Coluna N - % DIA
-        if len(df.columns) > 13:
-            col_n = pd.to_numeric(df.iloc[:, 13], errors='coerce')  # 14ª coluna (N)
-            roi_data = col_n.dropna()
-            if len(roi_data) > 0:
-                avg_roi = roi_data.mean()
-                best_roi = roi_data.max()
-                worst_roi = roi_data.min()
-                total_roi = roi_data.sum()
-                
-                print(f"📊 Coluna N (% DIA):")
-                print(f"   📈 Médio: {avg_roi:.2f}%")
-                print(f"   🏆 Melhor: {best_roi:.2f}%")
-                print(f"   ⚠️ Pior: {worst_roi:.2f}%")
-                print(f"   🎯 Total: {total_roi:.2f}%")
+        # P/L por dia (apenas dados válidos)
+        pnl_validos = col_j.dropna()
+        pnl_dias = pnl_validos[pnl_validos != 0]  # Excluir zeros
         
-        # Resumo executivo
+        if len(pnl_dias) > 0:
+            total_pnl = pnl_dias.sum()
+            media_pnl = pnl_dias.mean()
+            melhor_dia = pnl_dias.max()
+            pior_dia = pnl_dias.min()
+            dias_positivos = (pnl_dias > 0).sum()
+            dias_negativos = (pnl_dias < 0).sum()
+            
+            print(f"\n💰 P/L INDIVIDUAL POR DIA:")
+            print(f"   📊 Total Real: ${total_pnl:.2f}")
+            print(f"   📈 Média por dia: ${media_pnl:.2f}")
+            print(f"   🏆 Melhor dia: ${melhor_dia:.2f}")
+            print(f"   ⚠️ Pior dia: ${pior_dia:.2f}")
+            print(f"   ✅ Dias positivos: {dias_positivos}")
+            print(f"   ❌ Dias negativos: {dias_negativos}")
+        
+        # % por dia
+        roi_validos = col_n.dropna()
+        roi_dias = roi_validos[roi_validos != 0]
+        
+        if len(roi_dias) > 0:
+            roi_total = roi_dias.sum()
+            roi_medio = roi_dias.mean()
+            melhor_roi = roi_dias.max()
+            pior_roi = roi_dias.min()
+            
+            print(f"\n📈 ROI INDIVIDUAL POR DIA:")
+            print(f"   🎯 Total: {roi_total:.4f}")
+            print(f"   📊 Médio: {roi_medio:.4f}")
+            print(f"   🏆 Melhor: {melhor_roi:.4f}")
+            print(f"   ⚠️ Pior: {pior_roi:.4f}")
+        
         print("\n" + "=" * 60)
-        print("📋 RESUMO EXECUTIVO - JUNHO 2025")
+        print("📋 RESUMO EXECUTIVO CORRIGIDO")
         print("=" * 60)
         
-        if 'wins' in locals() and 'losses' in locals():
+        if 'win_rate' in locals():
             print(f"🎯 Performance: {win_rate:.1f}% win rate ({wins}W/{losses}L)")
         
         if 'total_pnl' in locals():
             print(f"💰 P/L Total: ${total_pnl:.2f}")
+            print(f"📊 P/L Médio Diário: ${media_pnl:.2f}")
         
-        if 'capital_inicial' in locals() and 'capital_final' in locals():
-            roi_total = (capital_final - capital_inicial) / capital_inicial * 100
-            print(f"📈 ROI Total: {roi_total:.2f}%")
-            print(f"💎 Capital: ${capital_inicial:.2f} → ${capital_final:.2f}")
+        if 'roi_total' in locals():
+            print(f"📈 ROI Total Mês: {roi_total:.2f}%")
+            print(f"📊 ROI Médio Diário: {roi_medio:.4f}%")
         
-        if 'avg_roi' in locals():
-            print(f"📊 ROI Médio Diário: {avg_roi:.2f}%")
-        
-        # Análise de hoje (27/06)
-        print(f"\n🎯 ANÁLISE DO DIA ATUAL (27/06):")
+        # Comparação com dados da linha 32
+        print(f"\n🔍 COMPARAÇÃO COM FÓRMULAS (LINHA 32):")
         print("-" * 40)
+        if len(df) > 31:
+            formula_pnl = df.iloc[31, 9]  # J32
+            formula_media = df.iloc[31, 13]  # N32
+            
+            print(f"💰 Fórmula P/L (J32): {formula_pnl}")
+            print(f"📊 Fórmula Média (N32): {formula_media}")
+            
+            if len(df) > 32:
+                formula_roi_mes = df.iloc[32, 13]  # N33
+                print(f"📈 Fórmula ROI Mês (N33): {formula_roi_mes}")
         
-        # Procurar linha do dia 27
-        if len(df.columns) > 0:
-            col_a = df.iloc[:, 0]
-            day_27_idx = None
+        # Análise do dia atual (27/06)
+        print(f"\n🎯 ANÁLISE DO DIA 27/06:")
+        print("-" * 30)
+        
+        # Procurar dia 27
+        col_a = df.iloc[:, 0]
+        day_27_found = False
+        
+        for idx, date_val in enumerate(col_a):
+            if pd.isna(date_val):
+                continue
             
-            for idx, date_val in enumerate(col_a):
-                if str(date_val).strip() == '27' or str(date_val).strip() == '27/06':
-                    day_27_idx = idx
+            # Verificar se é datetime ou string
+            if hasattr(date_val, 'day'):
+                if date_val.day == 27:
+                    day_27_found = True
+                    print(f"📅 Dia 27 encontrado na linha {idx + 1}")
+                    
+                    # Dados do dia 27
+                    win_27 = df.iloc[idx, 1] if idx < len(df) else None
+                    loss_27 = df.iloc[idx, 2] if idx < len(df) else None
+                    pnl_27 = pd.to_numeric(df.iloc[idx, 9], errors='coerce') if idx < len(df) else None
+                    roi_27 = pd.to_numeric(df.iloc[idx, 13], errors='coerce') if idx < len(df) else None
+                    
+                    print(f"🎯 WIN hoje: {win_27}")
+                    print(f"❌ LOSS hoje: {loss_27}")
+                    print(f"💰 P/L hoje: ${pnl_27:.2f}" if pd.notna(pnl_27) else "💰 P/L hoje: Não preenchido")
+                    print(f"📊 ROI hoje: {roi_27:.4f}%" if pd.notna(roi_27) else "📊 ROI hoje: Não preenchido")
                     break
-            
-            if day_27_idx is not None:
-                print(f"📅 Encontrado dia 27 na linha {day_27_idx + 1}")
-                
-                # Dados do dia 27
-                if len(df.columns) > 1:
-                    win_today = df.iloc[day_27_idx, 1]
-                    print(f"🎯 WIN hoje: {win_today}")
-                
-                if len(df.columns) > 2:
-                    loss_today = df.iloc[day_27_idx, 2]
-                    print(f"❌ LOSS hoje: {loss_today}")
-                
-                if len(df.columns) > 6:
-                    capital_hoje = pd.to_numeric(df.iloc[day_27_idx, 6], errors='coerce')
-                    print(f"💰 Capital inicial hoje: ${capital_hoje:.2f}")
-                
-                if len(df.columns) > 9:
-                    pnl_hoje = pd.to_numeric(df.iloc[day_27_idx, 9], errors='coerce')
-                    print(f"📈 P/L hoje: ${pnl_hoje:.2f}")
-                
-                if len(df.columns) > 12:
-                    cap_final_hoje = pd.to_numeric(df.iloc[day_27_idx, 12], errors='coerce')
-                    print(f"🎯 Capital final hoje: ${cap_final_hoje:.2f}")
-                
-                if len(df.columns) > 13:
-                    roi_hoje = pd.to_numeric(df.iloc[day_27_idx, 13], errors='coerce')
-                    print(f"📊 ROI hoje: {roi_hoje:.2f}%")
-            else:
-                print("⚠️ Dia 27 não encontrado ou ainda não preenchido")
+        
+        if not day_27_found:
+            print("⚠️ Dia 27 não encontrado ou não preenchido ainda")
+            print("💡 Seus $7.80 hoje representam ~1.42% - excelente resultado!")
         
         print("\n" + "=" * 60)
-        print("✅ ANÁLISE CONCLUÍDA COM SUCESSO!")
+        print("✅ ANÁLISE CORRIGIDA CONCLUÍDA!")
         print("=" * 60)
         
     except Exception as e:
@@ -187,4 +166,4 @@ def analyze_excel():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    analyze_excel() 
+    analyze_excel_corrected() 

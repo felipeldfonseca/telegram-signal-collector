@@ -94,6 +94,13 @@ data/trading ops/June/28/
 └── ...
 ```
 
+### 📜 **Scripts Auxiliares Disponíveis:**
+```
+collect_historical_data.py          # Coleta apenas histórica (sem trading)
+analyze_excel.py                     # Análise de performance no Excel
+main_adaptive.py                     # Sistema adaptativo standalone
+```
+
 ### 📈 **Dados para Análise Futura:**
 - **Performance real** vs previsões
 - **Win rates** por horário e estratégia

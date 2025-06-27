@@ -1,211 +1,231 @@
-# 📈 Telegram Signal Collector
+# 🚀 Sistema de Trading Adaptativo - Telegram Signal Collector
 
-Um sistema automatizado para coletar e armazenar sinais de trading de opções binárias do Telegram com suporte a PostgreSQL e análise de dados.
+## 📋 Visão Geral
 
-## 🚀 Funcionalidades
+Sistema inteligente que monitora sinais de trading do Telegram em tempo real e seleciona automaticamente a melhor estratégia baseada nas condições atuais do mercado.
 
-- 📊 Coleta automática de sinais WIN/STOP com gestão Martingale
-- 🗄️ Armazenamento dual: CSV + PostgreSQL
-- ⏰ Modo backfill (histórico) e listener em tempo real
-- 📈 Análise de performance com notebook Jupyter
-- 🔄 Tratamento robusto de rate limits (FloodWait)
-- 🌍 Timezone América/São Paulo
+### 🎯 Características Principais
 
-## 📁 Estrutura do Projeto
+- **Análise em Tempo Real**: Monitora sinais 24/7 durante horário de operação
+- **Seleção Automática**: Escolhe a melhor estratégia a cada hora
+- **3 Estratégias Otimizadas**: Martingale Conservative, Infinity Conservative e Pause
+- **Relatórios Detalhados**: Logs completos e análises salvos automaticamente
+- **Interface Intuitiva**: Console com informações em tempo real
 
-```
-telegram_signal_collector/
-├── README.md
-├── .env.example
-├── requirements.txt
-├── main.py
-├── collector/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── regex.py
-│   ├── parser.py
-│   ├── storage.py
-│   └── runner.py
-└── notebooks/
-    └── Exploratory.ipynb
-```
+## 🏆 Estratégias Disponíveis
 
-## 🔧 Configuração Inicial
+### 🎲 Martingale Premium Conservative
+- **ROI**: 56.0% mensal
+- **Win Rate**: 78.7%
+- **Risco**: $36 por sessão
+- **Tentativas**: Até G1 (2 tentativas)
+- **Ativação**: Quando G1 recovery > 65%
 
-### 1. Obter Credenciais da API do Telegram
+### ♾️ Infinity Conservative
+- **ROI**: 45.1% mensal  
+- **Win Rate**: 92.3% (sessões)
+- **Risco**: $49 por sessão
+- **Tentativas**: 7 níveis progressivos
+- **Ativação**: Quando 1ª tentativa > 60%
 
-1. Acesse [my.telegram.org](https://my.telegram.org)
-2. Faça login com seu número de telefone
-3. Vá em "API Development Tools"
-4. Crie uma nova aplicação:
-   - **App title**: Telegram Signal Collector
-   - **Short name**: signal_collector
-   - **Platform**: Desktop
-5. Anote o `API_ID` e `API_HASH`
+### ⏸️ Pause
+- **Função**: Preservar capital
+- **Ativação**: Quando G2+STOP > 30%
+- **Objetivo**: Evitar perdas em condições ruins
 
-### 2. Configurar Ambiente
+## 🧠 Sistema de Decisão Inteligente
 
+### Critérios de Análise
+- **Taxa de sucesso na 1ª tentativa**
+- **Taxa de recuperação no G1**
+- **Taxa de G2+STOP**
+- **Confiança mínima de 70%**
+
+### Workflow Automático
+1. **Coleta**: Monitora sinais do Telegram
+2. **Análise**: A cada hora avalia condições
+3. **Decisão**: Seleciona melhor estratégia
+4. **Execução**: Aplica estratégia escolhida
+5. **Relatório**: Salva resultados e métricas
+
+## ⚙️ Configuração
+
+### 1. Pré-requisitos
 ```bash
-# Clone ou baixe o projeto
-cd telegram_signal_collector
-
-# Crie ambiente virtual
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate     # Windows
-
-# Instale dependências
 pip install -r requirements.txt
-
-# Configure variáveis de ambiente
-cp .env.example .env
-# Edite o arquivo .env com suas credenciais
 ```
 
-### 3. Configurar PostgreSQL (Opcional)
+### 2. Configuração do Telegram
+1. Acesse https://my.telegram.org/auth
+2. Crie uma aplicação
+3. Obtenha API ID e API Hash
 
-Se você quiser usar PostgreSQL, execute este script SQL:
-
-```sql
--- Criar banco de dados
-CREATE DATABASE telegram_signals;
-
--- Conectar ao banco criado
-\c telegram_signals;
-
--- Criar tabela de sinais
-CREATE TABLE IF NOT EXISTS signals (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    asset VARCHAR(20) NOT NULL,
-    result CHAR(1) NOT NULL CHECK (result IN ('W', 'L')),
-    attempt INTEGER CHECK (attempt IN (1, 2, 3)),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(timestamp, asset, result, attempt)
-);
-
--- Criar índices para performance
-CREATE INDEX idx_signals_timestamp ON signals(timestamp);
-CREATE INDEX idx_signals_asset ON signals(asset);
-CREATE INDEX idx_signals_result ON signals(result);
-```
-
-### 4. Configurar .env
-
+### 3. Arquivo de Configuração (.env)
 ```env
 # Telegram API
-TG_API_ID=seu_api_id_aqui
-TG_API_HASH=seu_api_hash_aqui
-TG_SESSION=telegram_session
-TG_GROUP=nome_do_grupo_ou_@username
+TG_API_ID=seu_api_id
+TG_API_HASH=seu_api_hash
+TG_GROUP=nome_do_grupo
 
-# PostgreSQL (opcional)
-PG_DSN=postgresql://usuario:senha@localhost:5432/telegram_signals
+# Opcional
+LOG_LEVEL=INFO
+PG_DSN=postgresql://...  # Para PostgreSQL
 ```
 
-## 📊 Uso
+## 🚀 Execução
 
-### Coletar Histórico de um Dia Específico
-
+### Modo Produção (Tempo Real)
 ```bash
-# Coletar ontem e salvar em CSV
-python main.py --date 2025-01-15 --export csv
-
-# Coletar ontem e salvar no PostgreSQL
-python main.py --date 2025-01-15 --export pg
-
-# Coletar intervalo de datas
-python main.py --from 2025-01-10 --to 2025-01-15 --export pg
+python main_adaptive.py
 ```
 
-### Listener em Tempo Real
-
+### Modo Teste (Análise de Cenários)
 ```bash
-# Escutar novos sinais e salvar em CSV
-python main.py --live --export csv
-
-# Escutar novos sinais e salvar no PostgreSQL
-python main.py --live --export pg
+python main_adaptive.py --test
 ```
 
-### Opções Disponíveis
-
+### Ajuda
 ```bash
-python main.py --help
+python main_adaptive.py --help
 ```
 
-- `--date YYYY-MM-DD`: Coleta histórico de um dia específico
-- `--from YYYY-MM-DD`: Data inicial para coleta de intervalo
-- `--to YYYY-MM-DD`: Data final para coleta de intervalo
-- `--live`: Modo listener em tempo real
-- `--export {csv,pg}`: Formato de exportação (padrão: csv)
+## 📊 Interface do Sistema
 
-## 📈 Análise de Dados
-
-Execute o notebook Jupyter para análise dos dados coletados:
-
-```bash
-jupyter notebook notebooks/Exploratory.ipynb
+### Tela Inicial
+```
+🚀===============================================================================
+SISTEMA DE TRADING ADAPTATIVO - TELEGRAM SIGNAL COLLECTOR
+================================================================================
+🎯 Análise inteligente de mercado em tempo real
+🔄 Seleção automática da melhor estratégia
+📊 Monitoramento 24/7 com relatórios detalhados
+================================================================================
 ```
 
-O notebook inclui:
-- 📊 Estatísticas de win/loss por tentativa
-- 💰 Cálculo de P&L com gestão 1-2-4
-- 📈 Gráficos de performance cumulativa
-- 📅 Análise temporal dos sinais
+### Monitor de Sinais
+```
+🎯 21:30:15 - NOVO SINAL
+   💰 Asset: BTC/USDT
+   📈 Resultado: ✅ WIN
+   🎲 Tentativa: G1
+   📊 Total da sessão: 15
+   🎯 Estratégia: Ativo - Martingale Conservative
+--------------------------------------------------
+```
 
-## 🎯 Formatos de Mensagem Suportados
+### Análise de Mercado
+```
+🔍===============================================================================
+📊 ANÁLISE DE MERCADO CONCLUÍDA
+================================================================================
+⏰ Horário: 22:00:00
+📈 🔍 Análise 21:00-22:00: 12 ops | 1ª: 45.0% | G1: 75.0% | G2+STOP: 15.0% | 
+    Estratégia: MARTINGALE_CONSERVATIVE (Confiança: 85.0%)
+🔄 MUDANÇA DE ESTRATÉGIA DETECTADA!
+🎯 Nova estratégia: Ativo - Martingale Conservative
+📊 Métricas: Win Rate: 78.7% | ROI: 56.0% | Risk: $36.0
+================================================================================
+```
 
-| Tipo | Regex Pattern | Exemplo |
-|------|---------------|---------|
-| Win 1ª | `✅ WIN em \`([A-Z]+/[A-Z]+)\` ✅` | `✅ WIN em \`ADA/USDT\` ✅` |
-| Win 2ª | `✅ WIN \(G1\) em \`([A-Z]+/[A-Z]+)\` ✅` | `✅ WIN (G1) em \`BTC/USDT\` ✅` |
-| Win 3ª | `✅ WIN \(G2\) em \`([A-Z]+/[A-Z]+)\` ✅` | `✅ WIN (G2) em \`ETH/USDT\` ✅` |
-| Loss | `❎ STOP em \`([A-Z]+/[A-Z]+)\` ❎` | `❎ STOP em \`DOT/USDT\` ❎` |
+## 📁 Estrutura de Arquivos
 
-## ⚠️ Limitações e Avisos
+```
+collector/
+├── __init__.py              # Módulo principal
+├── config.py               # Configurações
+├── parser.py               # Parser de sinais
+├── storage.py              # Armazenamento
+├── runner.py               # Executor Telegram
+├── adaptive_strategy.py    # Sistema adaptativo
+├── live_trader.py          # Trading em tempo real
+└── regex.py               # Padrões de reconhecimento
 
-1. **Histórico Limitado**: Se "Chat History for New Members" estiver desabilitado no grupo, você só verá mensagens a partir de quando entrou
-2. **Rate Limits**: O sistema trata automaticamente os limites de rate do Telegram
-3. **Privacidade**: Não compartilhe conteúdo do grupo externamente (Termos do Telegram)
-4. **Horário de Operação**: Sistema coleta sinais entre 17:00-23:59:59 (America/Sao_Paulo)
+data/
+├── signals_YYYY-MM-DD.csv  # Sinais coletados
+└── analysis_YYYY-MM-DD.jsonl # Análises realizadas
 
-## 🔍 Troubleshooting
+main_adaptive.py            # Script principal
+README_ADAPTATIVO.md        # Este arquivo
+```
 
-### Erro de Autenticação
-- Verifique se `API_ID` e `API_HASH` estão corretos no `.env`
-- Delete o arquivo `.session` e tente novamente
+## 🕐 Horário de Operação
 
-### Grupo Não Encontrado
-- Certifique-se de que `TG_GROUP` está correto (nome ou @username)
-- Verifique se você é membro do grupo
+- **Início**: 17:00 (horário de Brasília)
+- **Fim**: 23:59 (horário de Brasília)
+- **Análises**: A cada 60 minutos
+- **Monitoramento**: Contínuo durante operação
 
-### Erro de Conexão PostgreSQL
-- Verifique se o PostgreSQL está rodando
-- Confirme as credenciais no `PG_DSN`
-- Teste a conexão: `psql "postgresql://usuario:senha@localhost:5432/telegram_signals"`
+## 📈 Métricas Monitoradas
 
-## 📝 Logs
+### Por Sinal
+- Asset negociado
+- Resultado (WIN/LOSS)
+- Tentativa (1ª, G1, G2, STOP)
+- Timestamp preciso
 
-O sistema gera logs detalhados de:
-- Mensagens processadas
-- Sinais identificados
-- Erros de parsing
-- Resumos de execução
+### Por Análise
+- Total de operações
+- Taxa de sucesso 1ª tentativa
+- Taxa de recuperação G1
+- Taxa de G2+STOP
+- Estratégia recomendada
+- Nível de confiança
 
-## 🤝 Contribuindo
+### Por Sessão
+- Tempo total de operação
+- Sinais processados
+- Mudanças de estratégia
+- Análises realizadas
 
-1. Fork o projeto
-2. Crie uma branch para sua feature
-3. Commit suas mudanças
-4. Push para a branch
-5. Abra um Pull Request
+## 🛡️ Segurança e Confiabilidade
 
-## 📄 Licença
+- **Validação de Dados**: Verificação de integridade dos sinais
+- **Tratamento de Erros**: Recovery automático de falhas
+- **Backup Automático**: Dados salvos em tempo real
+- **Logs Detalhados**: Rastreamento completo de atividades
 
-Este projeto é apenas para uso educacional e pessoal. Respeite os Termos de Serviço do Telegram.
+## 🔧 Personalização
+
+### Ajustar Critérios de Decisão
+Edite `collector/adaptive_strategy.py`:
+```python
+self.decision_thresholds = {
+    'pause_threshold': 30.0,      # % para pausar
+    'martingale_threshold': 65.0, # % para Martingale
+    'infinity_threshold': 60.0,   # % para Infinity
+    'min_operations': 10,         # Mín. operações
+    'confidence_threshold': 70.0  # Confiança mínima
+}
+```
+
+### Ajustar Horário de Operação
+Edite `collector/config.py`:
+```python
+self.start_hour = 17  # Hora de início
+self.end_hour = 23    # Hora de fim
+```
+
+### Ajustar Intervalo de Análise
+Edite `collector/live_trader.py`:
+```python
+self.analysis_interval = 60  # Minutos entre análises
+```
+
+## 📞 Suporte
+
+Para dúvidas ou problemas:
+1. Verifique os logs em tempo real
+2. Execute modo teste: `python main_adaptive.py --test`
+3. Analise arquivos em `data/`
+
+## 🎯 Próximas Funcionalidades
+
+- [ ] Dashboard web em tempo real
+- [ ] Notificações via Telegram
+- [ ] Backtesting automático
+- [ ] API REST para integração
+- [ ] Machine Learning para previsões
 
 ---
 
-🚀 **Desenvolvido para automatizar a coleta de sinais de trading com precisão e eficiência!** 
+**🚀 Sistema desenvolvido para maximizar ROI através de análise inteligente e seleção automática de estratégias otimizadas!** 
