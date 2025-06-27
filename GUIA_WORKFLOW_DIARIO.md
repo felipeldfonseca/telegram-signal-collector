@@ -88,7 +88,12 @@ python daily_trading_system.py
 ### 📁 **Arquivos Gerados:**
 ```
 data/trading ops/June/28/
-├── signals_2025-06-28.csv          # Todos os sinais do dia
+├── pre-op time/
+│   └── signals_2025-06-28.csv      # Dados antes de operar
+├── op time/
+│   └── signals_2025-06-28.csv      # Dados durante operação
+├── daily ops/
+│   └── signals_2025-06-28.csv      # ← ARQUIVO FINAL CONSOLIDADO
 ├── analysis_2025-06-28_17-59.json  # Análise das 17:59
 ├── analysis_2025-06-28_18-59.json  # Análise das 18:59
 └── ...
@@ -99,6 +104,7 @@ data/trading ops/June/28/
 collect_historical_data.py          # Coleta apenas histórica (sem trading)
 analyze_excel.py                     # Análise de performance no Excel
 main_adaptive.py                     # Sistema adaptativo standalone
+consolidate_daily_data.py            # Consolida dados do dia (execute à meia-noite)
 ```
 
 ### 📈 **Dados para Análise Futura:**
@@ -186,6 +192,38 @@ python daily_trading_system.py
 
 ---
 
+---
+
+## 🔄 **WORKFLOW COMPLETO DE 3 ETAPAS (OPCIONAL):**
+
+### 📋 **Para máximo controle e dados completos:**
+
+#### 🌅 **ETAPA 1: Coleta Pré-Trading (Manhã)**
+```bash
+python collect_historical_data.py
+```
+**Resultado:** `data/trading ops/June/28/pre-op time/signals_2025-06-28.csv`
+
+#### 🚀 **ETAPA 2: Trading Adaptativo (17:00-23:59)**
+```bash
+python main_adaptive.py
+```
+**Resultado:** `data/trading ops/June/28/op time/signals_2025-06-28.csv`
+
+#### 🌙 **ETAPA 3: Consolidação Final (Meia-noite)**
+```bash
+python consolidate_daily_data.py
+```
+**Resultado:** `data/trading ops/June/28/daily ops/signals_2025-06-28.csv`
+
+### 🎯 **Benefícios do Workflow de 3 Etapas:**
+- ✅ **Dados completos**: Nenhum gap de informação
+- ✅ **Análise detalhada**: Comparar pré-op vs op vs pós-op
+- ✅ **Histórico perfeito**: Arquivo final com dia completo
+- ✅ **Flexibilidade**: Pode parar/reiniciar sem perder dados
+
+---
+
 ## 🚨 **IMPORTANTE:**
 
 ### 📱 **Para parar o sistema:**
@@ -198,4 +236,5 @@ python daily_trading_system.py
 
 ### 📊 **Para análise de performance:**
 - Todos os dados ficam salvos em `data/`
-- Use os scripts de análise existentes 
+- Use os scripts de análise existentes
+- **Arquivo final consolidado**: `daily ops/signals_YYYY-MM-DD.csv` 
