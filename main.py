@@ -12,11 +12,17 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+from rich.table import Table
+import asyncio
+import logging
+from typing import Optional
+import pandas as pd
 
 # Adicionar diretório do projeto ao path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from collector import Config, Runner
+from collector.regex import RegexPatterns
 
 app = typer.Typer(
     name="telegram-signal-collector",
@@ -171,8 +177,6 @@ def test_patterns():
     
     console.print("🧪 Testando padrões regex...", style="yellow")
     
-    from collector.regex import RegexPatterns
-    
     patterns = RegexPatterns()
     patterns.test_patterns()
 
@@ -282,6 +286,206 @@ def setup_guide():
     """
     
     console.print(Panel(setup_text, title="📋 Setup", border_style="green"))
+
+
+@app.command("analyze")
+def analyze_manual_data(
+    file_path: str = typer.Option(
+        "docs/grouphistory copy.txt",
+        "--file", "-f",
+        help="Caminho para o arquivo de histórico manual"
+    ),
+    export_format: str = typer.Option(
+        "csv",
+        "--export", "-e",
+        help="Formato de exportação (csv, pg, both)"
+    ),
+    show_details: bool = typer.Option(
+        True,
+        "--details/--no-details",
+        help="Mostrar análise detalhada"
+    )
+):
+    """📊 Analisa dados manuais coletados e gera relatório completo."""
+    print_banner()
+    
+    console.print(f"📂 Processando arquivo: {file_path}", style="yellow")
+    
+    try:
+        # Configurar sistema
+        config = Config()
+        runner = Runner(config)
+        
+        # Processar dados manuais
+        signals = runner.parser.parse_manual_history_simple(file_path)
+        
+        if not signals:
+            console.print("❌ Nenhum sinal encontrado no arquivo", style="red")
+            return
+        
+        console.print(f"✅ {len(signals)} sinais processados", style="green")
+        
+        # Salvar dados estruturados
+        runner.storage.save_signals(signals, export_format)
+        
+        # Gerar análise completa
+        generate_detailed_analysis(signals, show_details)
+        
+        console.print("\n🎯 Análise completa! Verifique os arquivos gerados.", style="bold green")
+        
+    except Exception as e:
+        console.print(f"❌ Erro durante análise: {e}", style="red")
+        raise typer.Exit(1)
+
+
+def generate_detailed_analysis(signals, show_details: bool = True):
+    """
+    Gera análise detalhada dos sinais.
+    
+    Args:
+        signals: Lista de sinais
+        show_details: Se deve mostrar detalhes completos
+    """
+    if not signals:
+        return
+    
+    # Converter para DataFrame para análise
+    df = pd.DataFrame([s.to_dict() for s in signals])
+    
+    # Calcular estatísticas básicas
+    total_signals = len(df)
+    wins = df[df['result'] == 'W'].shape[0]
+    losses = df[df['result'] == 'L'].shape[0]
+    win_rate = (wins / total_signals) * 100 if total_signals > 0 else 0
+    
+    # Estatísticas por tentativa
+    win_attempts = df[df['result'] == 'W']['attempt'].value_counts().sort_index()
+    
+    # Calcular P&L Martingale (1-2-4)
+    pnl_results = calculate_martingale_pnl(df)
+    
+    # Assets mais negociados
+    top_assets = df['asset'].value_counts().head(5)
+    
+    # Análise temporal
+    df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
+    hourly_distribution = df['hour'].value_counts().sort_index()
+    
+    # Mostrar resultados
+    console.print("\n📊 ANÁLISE COMPLETA DOS SINAIS", style="bold blue")
+    console.print("=" * 50)
+    
+    # Tabela de estatísticas gerais
+    stats_table = Table(title="📈 Estatísticas Gerais")
+    stats_table.add_column("Métrica", style="cyan")
+    stats_table.add_column("Valor", style="magenta")
+    
+    stats_table.add_row("Total de Sinais", str(total_signals))
+    stats_table.add_row("Wins", f"{wins} ({win_rate:.1f}%)")
+    stats_table.add_row("Losses", f"{losses} ({(losses/total_signals)*100:.1f}%)")
+    stats_table.add_row("P&L Total", f"R$ {pnl_results['total_pnl']:.2f}")
+    stats_table.add_row("P&L por Operação", f"R$ {pnl_results['avg_pnl']:.2f}")
+    
+    console.print(stats_table)
+    
+    # Tabela de wins por tentativa
+    if not win_attempts.empty:
+        attempts_table = Table(title="🎯 Wins por Tentativa")
+        attempts_table.add_column("Tentativa", style="cyan")
+        attempts_table.add_column("Quantidade", style="magenta")
+        attempts_table.add_column("Percentual", style="green")
+        
+        for attempt, count in win_attempts.items():
+            percentage = (count / wins) * 100 if wins > 0 else 0
+            attempts_table.add_row(
+                f"G{attempt}" if attempt else "N/A",
+                str(count),
+                f"{percentage:.1f}%"
+            )
+        
+        console.print(attempts_table)
+    
+    # Assets mais negociados
+    if not top_assets.empty:
+        assets_table = Table(title="💰 Top Assets")
+        assets_table.add_column("Asset", style="cyan")
+        assets_table.add_column("Operações", style="magenta")
+        assets_table.add_column("Percentual", style="green")
+        
+        for asset, count in top_assets.items():
+            percentage = (count / total_signals) * 100
+            assets_table.add_row(asset, str(count), f"{percentage:.1f}%")
+        
+        console.print(assets_table)
+    
+    # Análise de viabilidade (Martingale 1-2-4 com payout 90%)
+    required_win_rate = 89.42  # Breakeven calculado com distribuição real
+    
+    console.print(f"\n🎯 ANÁLISE DE VIABILIDADE", style="bold yellow")
+    console.print(f"Win Rate Atual: {win_rate:.1f}%")
+    console.print(f"Win Rate Necessário: {required_win_rate:.1f}%")
+    
+    if win_rate >= required_win_rate:
+        console.print("✅ Sistema LUCRATIVO! Pode prosseguir para automação.", style="bold green")
+    else:
+        deficit = required_win_rate - win_rate
+        console.print(f"⚠️ Precisa melhorar {deficit:.1f}% para ser lucrativo", style="bold red")
+    
+    # Mostrar detalhes se solicitado
+    if show_details:
+        console.print(f"\n📊 DETALHES ADICIONAIS", style="bold cyan")
+        console.print(f"Período: {df['timestamp'].min()} até {df['timestamp'].max()}")
+        console.print(f"Horário de maior atividade: {hourly_distribution.idxmax()}h ({hourly_distribution.max()} sinais)")
+        
+        # P&L por dia
+        df['date'] = pd.to_datetime(df['timestamp']).dt.date
+        daily_pnl = df.groupby('date').apply(lambda x: calculate_martingale_pnl(x)['total_pnl'])
+        console.print(f"Melhor dia: {daily_pnl.idxmax()} (R$ {daily_pnl.max():.2f})")
+        console.print(f"Pior dia: {daily_pnl.idxmin()} (R$ {daily_pnl.min():.2f})")
+
+
+def calculate_martingale_pnl(df):
+    """
+    Calcula P&L usando estratégia Martingale 1-2-4 com payout 90%.
+    
+    Args:
+        df: DataFrame com os sinais
+        
+    Returns:
+        Dict com resultados do P&L
+    """
+    if df.empty:
+        return {'total_pnl': 0, 'avg_pnl': 0, 'operations': 0}
+    
+    total_pnl = 0
+    operations = 0
+    
+    for _, signal in df.iterrows():
+        operations += 1
+        
+        if signal['result'] == 'W':
+            # Win: ganho baseado na tentativa com payout 90%
+            if signal['attempt'] == 1:
+                pnl = 0.90  # 90% de 1 dólar
+            elif signal['attempt'] == 2:
+                pnl = 1.8 - 1  # 90% de 2 dólares - 1 dólar perdido na G1 = 0.80
+            elif signal['attempt'] == 3:
+                pnl = 3.6 - 3  # 90% de 4 dólares - perdas anteriores (1+2) = 0.60
+            else:
+                pnl = 0.90  # Caso padrão (G1)
+        else:
+            # Loss: perda total da sequência Martingale
+            pnl = -7  # -(1 + 2 + 4)
+        
+        total_pnl += pnl
+    
+    avg_pnl = total_pnl / operations if operations > 0 else 0
+    
+    return {
+        'total_pnl': total_pnl,
+        'avg_pnl': avg_pnl,
+        'operations': operations
+    }
 
 
 if __name__ == "__main__":

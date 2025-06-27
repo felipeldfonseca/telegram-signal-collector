@@ -3,7 +3,8 @@ Parser de mensagens do Telegram para extrair sinais de trading
 """
 
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 import pytz
@@ -43,6 +44,250 @@ class SignalParser:
         self.config = config
         self.timezone = config.timezone
         
+    def parse_manual_history(self, file_path: str) -> List[Signal]:
+        """
+        Parse do histórico manual coletado em formato texto.
+        
+        Args:
+            file_path: Caminho para o arquivo de histórico
+            
+        Returns:
+            Lista de sinais extraídos
+        """
+        signals = []
+        current_date = None
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Dividir por linhas
+            lines = content.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                
+                # Detectar mudança de dia
+                if line.startswith('DIA '):
+                    date_match = re.search(r'DIA (\d{2})/(\d{2})', line)
+                    if date_match:
+                        day, month = date_match.groups()
+                        # Assumir ano 2025 baseado no contexto
+                        current_date = date(2025, int(month), int(day))
+                        logger.info(f"Processando data: {current_date}")
+                    continue
+                
+                # Pular linhas vazias ou que não são resultados
+                if not line or not line.startswith('> 🌐 IA de Sinais na Ebinex:'):
+                    continue
+                
+                # Extrair horário se presente
+                time_match = re.search(r'⏰ Entrada: (\d{2}):(\d{2})', line)
+                if time_match:
+                    # Esta é uma linha de sinal, não de resultado
+                    continue
+                
+                # Verificar se é um resultado (WIN/STOP)
+                if '✅ WIN' in line or '❎ STOP' in line:
+                    signal_data = find_signal(line)
+                    if signal_data and current_date:
+                        result, attempt, asset = signal_data
+                        
+                        # Para dados manuais, vamos usar um horário estimado
+                        # baseado na sequência (será ajustado depois)
+                        estimated_time = datetime.combine(
+                            current_date, 
+                            datetime.min.time().replace(hour=21, minute=0)  # Horário padrão
+                        )
+                        
+                        # Localizar para timezone do Brasil
+                        estimated_time = self.timezone.localize(estimated_time)
+                        
+                        signal = Signal(
+                            timestamp=estimated_time,
+                            asset=asset,
+                            result=result,
+                            attempt=attempt
+                        )
+                        
+                        signals.append(signal)
+                        logger.debug(f"Sinal extraído: {signal}")
+            
+            logger.info(f"Parse manual concluído: {len(signals)} sinais encontrados")
+            return signals
+            
+        except Exception as e:
+            logger.error(f"Erro ao processar histórico manual: {e}")
+            return []
+    
+    def parse_manual_history_enhanced(self, file_path: str) -> List[Signal]:
+        """
+        Parse aprimorado do histórico manual com timestamps precisos.
+        
+        Args:
+            file_path: Caminho para o arquivo de histórico
+            
+        Returns:
+            Lista de sinais extraídos com timestamps estimados
+        """
+        signals = []
+        current_date = None
+        current_signal_time = None
+        current_asset = None
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            lines = content.split('\n')
+            
+            for i, line in enumerate(lines):
+                line = line.strip()
+                
+                # Detectar mudança de dia
+                if line.startswith('DIA '):
+                    date_match = re.search(r'DIA (\d{2})/(\d{2})', line)
+                    if date_match:
+                        day, month = date_match.groups()
+                        current_date = date(2025, int(month), int(day))
+                        logger.info(f"Processando data: {current_date}")
+                    continue
+                
+                # Encontrar sinal de entrada
+                if '⚠️ Novo Sinal Encontrado ⚠️' in line:
+                    # Procurar asset e horário nas próximas linhas
+                    for j in range(i+1, min(i+5, len(lines))):
+                        next_line = lines[j].strip()
+                        
+                        # Extrair asset
+                        asset_match = re.search(r'🪙 Par: ([A-Z]+/[A-Z]+)', next_line)
+                        if asset_match:
+                            current_asset = asset_match.group(1)
+                        
+                        # Extrair horário
+                        time_match = re.search(r'⏰ Entrada: (\d{2}):(\d{2})', next_line)
+                        if time_match:
+                            hour, minute = map(int, time_match.groups())
+                            current_signal_time = (hour, minute)
+                            break
+                    continue
+                
+                # Verificar se é um resultado (WIN/STOP)
+                if ('✅ WIN' in line or '❎ STOP' in line) and current_date and current_signal_time and current_asset:
+                    signal_data = find_signal(line)
+                    if signal_data:
+                        result, attempt, asset = signal_data
+                        
+                        # Usar o asset correto (pode ser diferente na linha de resultado)
+                        if asset != current_asset:
+                            logger.debug(f"Asset mismatch: {current_asset} vs {asset}, usando {current_asset}")
+                            asset = current_asset
+                        
+                        # Criar timestamp preciso
+                        hour, minute = current_signal_time
+                        timestamp = datetime.combine(
+                            current_date,
+                            datetime.min.time().replace(hour=hour, minute=minute)
+                        )
+                        timestamp = self.timezone.localize(timestamp)
+                        
+                        signal = Signal(
+                            timestamp=timestamp,
+                            asset=asset,
+                            result=result,
+                            attempt=attempt
+                        )
+                        
+                        signals.append(signal)
+                        logger.debug(f"Sinal extraído: {signal}")
+                        
+                        # Reset para próximo sinal
+                        current_signal_time = None
+                        current_asset = None
+            
+            logger.info(f"Parse manual aprimorado concluído: {len(signals)} sinais encontrados")
+            return signals
+            
+        except Exception as e:
+            logger.error(f"Erro ao processar histórico manual aprimorado: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Fallback para método simples
+            return self.parse_manual_history_simple(file_path)
+    
+    def parse_manual_history_simple(self, file_path: str) -> List[Signal]:
+        """
+        Parse simples do histórico manual - só processa linhas de resultado.
+        
+        Args:
+            file_path: Caminho para o arquivo de histórico
+            
+        Returns:
+            Lista de sinais extraídos
+        """
+        signals = []
+        current_date = None
+        signal_counter = 0
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            lines = content.split('\n')
+            
+            for line in lines:
+                line = line.strip()
+                
+                # Detectar mudança de dia
+                if line.startswith('DIA '):
+                    date_match = re.search(r'DIA (\d{2})/(\d{2})', line)
+                    if date_match:
+                        day, month = date_match.groups()
+                        current_date = date(2025, int(month), int(day))
+                        signal_counter = 0  # Reset contador para o dia
+                        logger.info(f"Processando data: {current_date}")
+                    continue
+                
+                # Verificar se é um resultado (WIN/STOP)
+                if ('✅ WIN' in line or '❎ STOP' in line) and current_date:
+                    signal_data = find_signal(line)
+                    if signal_data:
+                        result, attempt, asset = signal_data
+                        
+                        # Criar timestamp estimado baseado na sequência
+                        base_hour = 21  # Começar às 21h
+                        minutes_offset = signal_counter * 5  # 5 minutos entre sinais
+                        
+                        total_minutes = (base_hour * 60) + minutes_offset
+                        hour = (total_minutes // 60) % 24
+                        minute = total_minutes % 60
+                        
+                        estimated_time = datetime.combine(
+                            current_date,
+                            datetime.min.time().replace(hour=hour, minute=minute)
+                        )
+                        estimated_time = self.timezone.localize(estimated_time)
+                        
+                        signal = Signal(
+                            timestamp=estimated_time,
+                            asset=asset,
+                            result=result,
+                            attempt=attempt
+                        )
+                        
+                        signals.append(signal)
+                        signal_counter += 1
+                        logger.debug(f"Sinal extraído: {signal}")
+            
+            logger.info(f"Parse manual simples concluído: {len(signals)} sinais encontrados")
+            return signals
+            
+        except Exception as e:
+            logger.error(f"Erro ao processar histórico manual simples: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
+    
     def parse_message(self, message) -> Optional[Signal]:
         """
         Extrai sinal de uma mensagem do Telegram.

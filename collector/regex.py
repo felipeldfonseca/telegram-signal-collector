@@ -10,27 +10,27 @@ class RegexPatterns:
     """Padrões regex para identificar sinais de trading."""
     
     def __init__(self):
-        # Win 1ª tentativa
+        # Win 1ª tentativa (com ou sem **)
         self.win_1st: Pattern = re.compile(
-            r'✅\s*WIN\s+em\s*`([A-Z]+/[A-Z]+)`\s*✅',
+            r'✅\s*\*?\*?\s*WIN\s+em\s*`([A-Z]+/[A-Z]+)`\s*\*?\*?\s*✅',
             re.IGNORECASE | re.MULTILINE
         )
         
-        # Win 2ª tentativa (G1)
+        # Win 2ª tentativa (G1) (com ou sem **)
         self.win_2nd: Pattern = re.compile(
-            r'✅\s*WIN\s*\(G1\)\s+em\s*`([A-Z]+/[A-Z]+)`\s*✅',
+            r'✅\s*\*?\*?\s*WIN\s*\(G1\)\s+em\s*`([A-Z]+/[A-Z]+)`\s*\*?\*?\s*✅',
             re.IGNORECASE | re.MULTILINE
         )
         
-        # Win 3ª tentativa (G2)
+        # Win 3ª tentativa (G2) (com ou sem **)
         self.win_3rd: Pattern = re.compile(
-            r'✅\s*WIN\s*\(G2\)\s+em\s*`([A-Z]+/[A-Z]+)`\s*✅',
+            r'✅\s*\*?\*?\s*WIN\s*\(G2\)\s+em\s*`([A-Z]+/[A-Z]+)`\s*\*?\*?\s*✅',
             re.IGNORECASE | re.MULTILINE
         )
         
-        # Loss/Stop após 3 tentativas
+        # Loss/Stop após 3 tentativas (com ou sem **)
         self.loss: Pattern = re.compile(
-            r'❎\s*STOP\s+em\s*`([A-Z]+/[A-Z]+)`\s*❎',
+            r'❎\s*\*?\*?\s*STOP\s+em\s*`([A-Z]+/[A-Z]+)`\s*\*?\*?\s*❎',
             re.IGNORECASE | re.MULTILINE
         )
         
