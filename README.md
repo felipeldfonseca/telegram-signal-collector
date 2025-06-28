@@ -79,6 +79,16 @@ PG_DSN=postgresql://...  # Para PostgreSQL
 python main_adaptive.py
 ```
 
+### Dashboard Interativo
+```bash
+python3 -m streamlit run dashboard.py
+```
+- **Acesso**: http://localhost:8501
+- **Análise visual completa** dos dados de trading
+- **Simulação realista** do fluxo operacional (17h-24h)
+- **Recomendações automáticas** de estratégia
+- **Documentação completa**: Ver `DASHBOARD_README.md`
+
 ### Modo Teste (Análise de Cenários)
 ```bash
 python main_adaptive.py --test
@@ -144,8 +154,9 @@ data/
 ├── signals_YYYY-MM-DD.csv  # Sinais coletados
 └── analysis_YYYY-MM-DD.jsonl # Análises realizadas
 
+dashboard.py                # Dashboard interativo
+DASHBOARD_README.md         # Documentação do dashboard
 main_adaptive.py            # Script principal
-README_ADAPTATIVO.md        # Este arquivo
 ```
 
 ## 🕐 Horário de Operação
