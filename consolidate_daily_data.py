@@ -13,12 +13,15 @@ data/trading ops/June/27/
 ├── op time/signals_2025-06-27.csv        # Dados durante operação
 └── daily ops/signals_2025-06-27.csv      # ← ARQUIVO FINAL CONSOLIDADO
 
-Uso: python consolidate_daily_data.py
+Uso: 
+python consolidate_daily_data.py                    # Usa data atual
+python consolidate_daily_data.py --date 2025-06-27  # Usa data específica
 """
 
 import asyncio
 import sys
 import os
+import argparse
 from datetime import datetime, timedelta
 import pandas as pd
 from pathlib import Path
@@ -36,11 +39,24 @@ from collector.regex import find_signal
 class DailyConsolidator:
     """Consolidador de dados diários."""
     
-    def __init__(self):
+    def __init__(self, target_date=None):
         self.config = Config()
         self.config.setup_logging()
         self.storage = Storage(self.config)
-        self.today = datetime.now(self.config.timezone).date()
+        
+        # Usar data específica ou data atual
+        if target_date:
+            if isinstance(target_date, str):
+                self.today = datetime.strptime(target_date, '%Y-%m-%d').date()
+            else:
+                self.today = target_date
+        else:
+            # Se é depois da meia-noite, usar dia anterior
+            now = datetime.now(self.config.timezone)
+            if now.hour < 6:  # Antes das 6:00, considerar dia anterior
+                self.today = (now - timedelta(days=1)).date()
+            else:
+                self.today = now.date()
         
         # Definir caminhos
         self.base_path = Path("data/trading ops") / self.today.strftime("%B") / str(self.today.day)
@@ -55,8 +71,8 @@ class DailyConsolidator:
         """Imprime banner do consolidador."""
         print("🔄 CONSOLIDADOR DE DADOS DIÁRIOS")
         print("=" * 60)
-        print(f"📅 Data: {self.today.strftime('%d/%m/%Y')}")
-        print(f"⏰ Horário: {datetime.now().strftime('%H:%M:%S')}")
+        print(f"📅 Data alvo: {self.today.strftime('%d/%m/%Y')}")
+        print(f"⏰ Horário atual: {datetime.now().strftime('%H:%M:%S')}")
         print("=" * 60)
     
     def load_existing_csvs(self):
@@ -128,39 +144,81 @@ class DailyConsolidator:
             await runner.setup_client()
             
             # Definir período de busca
-            now = datetime.now(self.config.timezone)
+            now_real = datetime.now(self.config.timezone)
+            
+            # Se estamos consolidando dia anterior, usar fim do dia
+            if self.today < now_real.date():
+                # Consolidando dia anterior - buscar até meia-noite
+                end_of_day = datetime.combine(self.today, datetime.max.time())
+                end_of_day = self.config.timezone.localize(end_of_day.replace(hour=23, minute=59, second=59))
+                now = end_of_day
+            else:
+                # Consolidando dia atual
+                now = now_real
             
             if last_timestamp:
                 # Buscar desde último sinal + 1 minuto
-                search_from = last_timestamp + timedelta(minutes=1)
+                if hasattr(last_timestamp, 'tz_localize'):
+                    # É pandas timestamp
+                    search_from = last_timestamp.tz_localize(self.config.timezone) + timedelta(minutes=1)
+                elif last_timestamp.tzinfo is None:
+                    # É datetime naive
+                    search_from = self.config.timezone.localize(last_timestamp) + timedelta(minutes=1)
+                else:
+                    # Já tem timezone
+                    search_from = last_timestamp + timedelta(minutes=1)
                 print(f"🕐 Buscando desde: {search_from.strftime('%H:%M')} até {now.strftime('%H:%M')}")
             else:
-                # Buscar dia completo (6:00 até agora)
-                search_from = now.replace(hour=6, minute=0, second=0, microsecond=0)
+                # Buscar dia completo (6:00 até fim)
+                search_from = datetime.combine(self.today, datetime.min.time())
+                search_from = self.config.timezone.localize(search_from.replace(hour=6, minute=0, second=0))
                 print(f"🕐 Buscando dia completo: {search_from.strftime('%H:%M')} até {now.strftime('%H:%M')}")
+            
+            print(f"📅 Data alvo: {self.today}")
+            print(f"🔍 Período: {search_from} até {now}")
             
             # Coletar mensagens
             entity = await runner.get_chat_entity()
             
             new_signals = []
             message_count = 0
+            messages_in_period = 0
             
-            async for message in runner.client.iter_messages(entity, limit=1000):
+            # Buscar mais mensagens para garantir que não perdemos nada
+            async for message in runner.client.iter_messages(entity, limit=2000):
                 # Converter timezone corretamente
                 if message.date.tzinfo is None:
                     local_time = pytz.UTC.localize(message.date).astimezone(self.config.timezone)
                 else:
                     local_time = message.date.astimezone(self.config.timezone)
                 
-                # Parar se chegou em mensagens muito antigas
-                if local_time.date() < self.today:
+                message_count += 1
+                
+                # Debug das primeiras mensagens
+                if message_count <= 5:
+                    print(f"   Debug msg {message_count}: {local_time.strftime('%d/%m %H:%M')} - {local_time.date()} vs {self.today}")
+                
+                # Parar se chegou em mensagens muito antigas (2 dias antes)
+                if local_time.date() < self.today - timedelta(days=1):
+                    print(f"   Parando busca - mensagem muito antiga: {local_time.date()}")
                     break
                 
-                # Pular se não está no período de interesse
-                if local_time < search_from or local_time > now:
+                # Verificar se é do dia alvo
+                if local_time.date() != self.today:
                     continue
                 
-                message_count += 1
+                messages_in_period += 1
+                
+                # Verificar se está no período de interesse - converter para mesmo tipo
+                search_from_aware = search_from
+                now_aware = now
+                
+                # Garantir que local_time seja timezone-aware
+                if local_time.tzinfo is None:
+                    local_time = self.config.timezone.localize(local_time)
+                
+                if local_time < search_from_aware or local_time > now_aware:
+                    continue
                 
                 # Tentar extrair sinal
                 if message.text:
@@ -174,15 +232,24 @@ class DailyConsolidator:
                             attempt=attempt
                         )
                         new_signals.append(signal)
+                        print(f"   ✅ Sinal encontrado: {local_time.strftime('%H:%M')} {asset} {result}")
             
             print(f"✅ Processadas {message_count} mensagens")
+            print(f"📅 Mensagens do dia {self.today}: {messages_in_period}")
             print(f"🎯 Novos sinais encontrados: {len(new_signals)}")
+            
+            if len(new_signals) > 0:
+                print("📋 Últimos 5 sinais encontrados:")
+                for signal in new_signals[-5:]:
+                    print(f"   {signal.timestamp.strftime('%H:%M')} | {signal.asset} | {signal.result} | G{signal.attempt}")
             
             await runner.cleanup()
             return new_signals
             
         except Exception as e:
             print(f"❌ Erro na coleta: {e}")
+            import traceback
+            traceback.print_exc()
             if runner.client:
                 await runner.cleanup()
             return []
@@ -197,8 +264,17 @@ class DailyConsolidator:
         # Adicionar dados existentes
         if existing_df is not None and len(existing_df) > 0:
             for _, row in existing_df.iterrows():
+                # Garantir que timestamp seja timezone-aware
+                timestamp = row['timestamp']
+                if hasattr(timestamp, 'tz_localize') and timestamp.tz is None:
+                    timestamp = timestamp.tz_localize(self.config.timezone)
+                elif isinstance(timestamp, str):
+                    timestamp = pd.to_datetime(timestamp)
+                    if timestamp.tz is None:
+                        timestamp = timestamp.tz_localize(self.config.timezone)
+                
                 all_data.append({
-                    'timestamp': row['timestamp'],
+                    'timestamp': timestamp,
                     'asset': row['asset'],
                     'result': row['result'],
                     'attempt': row['attempt']
@@ -207,8 +283,13 @@ class DailyConsolidator:
         
         # Adicionar novos sinais
         for signal in new_signals:
+            # Garantir que timestamp seja timezone-aware
+            timestamp = signal.timestamp
+            if timestamp.tzinfo is None:
+                timestamp = self.config.timezone.localize(timestamp)
+            
             all_data.append({
-                'timestamp': signal.timestamp,
+                'timestamp': timestamp,
                 'asset': signal.asset,
                 'result': signal.result,
                 'attempt': signal.attempt
@@ -355,7 +436,11 @@ class DailyConsolidator:
 
 async def main():
     """Função principal."""
-    consolidator = DailyConsolidator()
+    parser = argparse.ArgumentParser(description="Consolidador de Dados Diários - Telegram Signal Collector")
+    parser.add_argument("--date", type=str, help="Data específica para consolidar dados")
+    args = parser.parse_args()
+
+    consolidator = DailyConsolidator(args.date)
     await consolidator.run_consolidation()
 
 
