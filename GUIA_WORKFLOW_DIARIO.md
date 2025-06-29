@@ -37,7 +37,7 @@ python daily_trading_system.py
 #### 🧠 **ETAPA 2: Análise Pré-Trading**
 ```
 📊 Analisa condições gerais do dia
-🔮 Foca nas últimas 2 horas
+🔮 Foca na última 1 hora
 🎯 Recomenda estratégia inicial para 17:00
 💡 Explica a lógica da decisão
 ```
@@ -145,7 +145,7 @@ python daily_trading_system.py
 📊 ANÁLISE GERAL DO DIA:
    MarketConditions(first_attempt_success=0.73, g1_recovery=0.68, g2_plus_stop=0.12, recommended_strategy=<StrategyType.INFINITY_CONSERVATIVE: 'infinity_conservative'>, confidence_level=78.5)
 
-🔮 ANÁLISE ÚLTIMAS 2H (12 sinais):
+🔮 ANÁLISE ÚLTIMA 1H (12 sinais):
    MarketConditions(first_attempt_success=0.67, g1_recovery=0.75, g2_plus_stop=0.08, recommended_strategy=<StrategyType.MARTINGALE_CONSERVATIVE: 'martingale_conservative'>, confidence_level=82.1)
 
 🎯 RECOMENDAÇÃO INICIAL PARA 17:00:

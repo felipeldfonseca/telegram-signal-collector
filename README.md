@@ -129,7 +129,7 @@ SISTEMA DE TRADING ADAPTATIVO - TELEGRAM SIGNAL COLLECTOR
 📊 ANÁLISE DE MERCADO CONCLUÍDA
 ================================================================================
 ⏰ Horário: 22:00:00
-📈 🔍 Análise 21:00-22:00: 12 ops | 1ª: 45.0% | G1: 75.0% | G2+STOP: 15.0% | 
+📈 🔍 Análise 21:00-22:00: 12 ops | 1ª: 45.0% | G1: 75.0% | G2: 10.0% | STOP: 5.0% | Win rate: 82.5% | 
     Estratégia: MARTINGALE_CONSERVATIVE (Confiança: 85.0%)
 🔄 MUDANÇA DE ESTRATÉGIA DETECTADA!
 🎯 Nova estratégia: Ativo - Martingale Conservative

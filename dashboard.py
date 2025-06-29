@@ -9,11 +9,16 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
+from datetime import datetime, date
+import os
+import json
+import shutil
+from collections import defaultdict
 
 # Configuração otimizada
 st.set_page_config(
-    page_title="Trading Dashboard",
-    page_icon="📊",
+    page_title="📊 Dashboard Trading",
+    page_icon="📈",
     layout="wide"
 )
 
@@ -29,8 +34,11 @@ def load_data(file_path):
 def calculate_metrics(df):
     """Calcula métricas com cache."""
     total_signals = len(df)
-    wins = len(df[df['result'] == 'W'])
-    losses = len(df[df['result'] == 'L'])
+    # Conforme estratégias: apenas 1ª tentativa e G1 são wins, G2 e STOP são losses
+    first_attempt_wins = len(df[(df['result'] == 'W') & (df['attempt'] == 1)])
+    g1_wins = len(df[(df['result'] == 'W') & (df['attempt'] == 2)])
+    wins = first_attempt_wins + g1_wins  # Apenas 1ª tentativa + G1
+    losses = len(df[df['result'] == 'L']) + len(df[(df['result'] == 'W') & (df['attempt'] == 3)])  # Losses + G2
     win_rate = (wins / total_signals * 100) if total_signals > 0 else 0
     
     # Breakdown detalhado por tentativas
@@ -71,29 +79,35 @@ def calculate_hourly_analysis(df):
             continue
             
         total = len(hour_df)
-        wins = len(hour_df[hour_df['result'] == 'W'])
+        # Conforme estratégias: apenas 1ª tentativa e G1 são wins
+        first_attempt = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 1)])
+        g1_recovery = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 2)])
+        wins = first_attempt + g1_recovery  # Apenas 1ª tentativa + G1
         win_rate = (wins / total * 100) if total > 0 else 0
         
         # Métricas para recomendação
-        first_attempt = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 1)])
-        g1_recovery = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 2)])
         losses = len(hour_df[hour_df['result'] == 'L'])
         
         first_rate = (first_attempt / total * 100) if total > 0 else 0
-        g1_rate = (g1_recovery / total * 100) if total > 0 else 0
+        # G1 rate deve ser taxa de recuperação relativa (dos que não ganharam na primeira)
+        g1_rate = (g1_recovery / max(1, total - first_attempt) * 100) if total > first_attempt else 0
         loss_rate = (losses / total * 100) if total > 0 else 0
         
-        # Recomendação de estratégia para esta hora
-        if total < 5:  # Poucos dados
-            strategy = "Dados Insuficientes"
-        elif loss_rate > 30:
+        # Recomendação de estratégia usando mesma lógica do AdaptiveStrategy
+        # Calcular G2+STOP rate
+        g2_stops = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 3)]) + losses
+        g2_stop_rate = (g2_stops / total * 100) if total > 0 else 0
+        
+        if total < 10:  # Poucos dados (mesmo threshold do AdaptiveStrategy)
             strategy = "PAUSE"
-        elif g1_rate > 15 and first_rate < 60:
+        elif g2_stop_rate > 30:  # Se G2+STOP > 30%, pausar
+            strategy = "PAUSE"
+        elif g1_rate > 65:  # Se G1 recovery > 65%, usar Martingale (rate relativa, não absoluta)
             strategy = "Martingale Conservative"
-        elif first_rate > 50:
+        elif first_rate > 60:  # Se 1ª tentativa > 60%, usar Infinity
             strategy = "Infinity Conservative"
         else:
-            strategy = "Aguardar Mais Dados"
+            strategy = "Infinity Conservative"
         
         # Simular resultado da estratégia
         strategy_result = simulate_strategy_result(hour_df, strategy)
@@ -176,19 +190,26 @@ def simulate_infinity_conservative(operations):
     return "Vitória"
 
 def recommend_strategy(metrics):
-    """Recomenda estratégia."""
+    """Recomenda estratégia usando mesma lógica do AdaptiveStrategy."""
+    total = metrics['total_signals']
     first_rate = metrics['first_attempt_rate']
     g1_rate = metrics['g1_recovery_rate']
     loss_rate = metrics['loss_rate']
+    g2_rate = metrics['g2_recovery_rate']
     
-    if loss_rate > 30:
-        return "PAUSE - Condições desfavoráveis"
-    elif g1_rate > 15 and first_rate < 60:
+    # Calcular G2+STOP rate para consistência com AdaptiveStrategy
+    g2_stop_rate = g2_rate + loss_rate
+    
+    if total < 10:  # Poucos dados
+        return "PAUSE - Dados Insuficientes"
+    elif g2_stop_rate > 30:  # Se G2+STOP > 30%, pausar
+        return "PAUSE - Condições Desfavoráveis"
+    elif g1_rate > 65:  # Se G1 recovery > 65%, usar Martingale
         return "Martingale Conservative"
-    elif first_rate > 50:
+    elif first_rate > 60:  # Se 1ª tentativa > 60%, usar Infinity
         return "Infinity Conservative"
     else:
-        return "Aguardar Mais Dados"
+        return "Infinity Conservative"
 
 @st.cache_data
 def calculate_financial_metrics(df, initial_capital=540):
@@ -308,12 +329,13 @@ def calculate_realistic_financial_metrics(df):
             continue
             
         total = len(hour_df)
-        wins = len(hour_df[hour_df['result'] == 'W'])
+        # Conforme estratégias: apenas 1ª tentativa e G1 são wins
+        first_attempt = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 1)])
+        g1_recovery = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 2)])
+        wins = first_attempt + g1_recovery  # Apenas 1ª tentativa + G1
         win_rate = (wins / total * 100) if total > 0 else 0
         
         # Métricas para recomendação
-        first_attempt = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 1)])
-        g1_recovery = len(hour_df[(hour_df['result'] == 'W') & (hour_df['attempt'] == 2)])
         losses = len(hour_df[hour_df['result'] == 'L'])
         
         first_rate = (first_attempt / total * 100) if total > 0 else 0
@@ -696,172 +718,503 @@ def simulate_infinity_operations(hour_operations):
     
     return total_ops, wins, losses
 
+# ==================== SISTEMA DE TRADING LOG REAL ====================
+
+def get_trading_log_path(selected_date):
+    """Retorna o caminho para o arquivo de trading log da data selecionada."""
+    month_name = selected_date.strftime('%B')
+    day = selected_date.day
+    log_dir = f"data/trading ops/{month_name}/{day}/trading log"
+    
+    # Criar diretório se não existir
+    os.makedirs(log_dir, exist_ok=True)
+    
+    filename = f"real_trading_log_{selected_date.strftime('%Y-%m-%d')}.csv"
+    return os.path.join(log_dir, filename)
+
+def load_trading_log(selected_date):
+    """Carrega o log de trading real da data selecionada."""
+    log_path = get_trading_log_path(selected_date)
+    
+    if os.path.exists(log_path):
+        return pd.read_csv(log_path)
+    else:
+        # Criar DataFrame vazio com estrutura correta
+        return pd.DataFrame(columns=[
+            'date', 'hour_start', 'hour_end', 'timestamp', 'asset', 
+            'result', 'attempt', 'amount_bet', 'executed', 'pnl', 
+            'strategy_used', 'notes'
+        ])
+
+def save_trading_log(df_log, selected_date):
+    """Salva o log de trading real com backup automático."""
+    log_path = get_trading_log_path(selected_date)
+    
+    # Backup do arquivo existente
+    if os.path.exists(log_path):
+        backup_path = log_path.replace('.csv', f'_backup_{datetime.now().strftime("%H%M%S")}.csv')
+        shutil.copy2(log_path, backup_path)
+    
+    # Salvar novo arquivo
+    df_log.to_csv(log_path, index=False)
+    return log_path
+
+def validate_trading_log_data(operations_data, hour_signals):
+    """Valida os dados do trading log para detectar inconsistências."""
+    warnings = []
+    
+    # 1. Verificar se o número de operações executadas é razoável
+    executed_ops = sum(1 for op in operations_data if op['executed'])
+    total_signals = len(hour_signals)
+    
+    if executed_ops > total_signals:
+        warnings.append(f"⚠️ {executed_ops} operações executadas, mas apenas {total_signals} sinais disponíveis")
+    
+    # 2. Verificar wins consecutivos excessivos
+    consecutive_wins = 0
+    max_consecutive = 0
+    for op in operations_data:
+        if op['executed'] and op['result'] == 'W':
+            consecutive_wins += 1
+            max_consecutive = max(max_consecutive, consecutive_wins)
+        else:
+            consecutive_wins = 0
+    
+    if max_consecutive > 10:
+        warnings.append(f"⚠️ {max_consecutive} vitórias consecutivas pode ser inconsistente")
+    
+    # 3. Verificar P&L muito alto
+    total_pnl = sum(op['pnl'] for op in operations_data if op['executed'])
+    if total_pnl > 50:
+        warnings.append(f"⚠️ P&L de ${total_pnl:.2f} parece muito alto para uma sessão")
+    
+    # 4. Verificar operações em horários sem sinais
+    executed_times = {op['timestamp'] for op in operations_data if op['executed']}
+    signal_times = {row['timestamp'].strftime('%H:%M') for _, row in hour_signals.iterrows()}
+    
+    for exec_time in executed_times:
+        if exec_time not in signal_times:
+            warnings.append(f"⚠️ Operação executada às {exec_time} mas sem sinal correspondente")
+    
+    return warnings
+
+def calculate_real_vs_theoretical_comparison(real_log, theoretical_simulation):
+    """Calcula comparação entre performance real e teórica."""
+    if len(real_log) == 0:
+        return None
+    
+    # Dados reais
+    real_operations = real_log[real_log['executed'] == True]
+    real_pnl = real_operations['pnl'].sum() if len(real_operations) > 0 else 0
+    real_hours = len(real_log['hour_start'].unique()) if len(real_log) > 0 else 0
+    real_win_rate = (len(real_operations[real_operations['pnl'] > 0]) / len(real_operations) * 100) if len(real_operations) > 0 else 0
+    
+    # Dados teóricos
+    theoretical_pnl = theoretical_simulation['total_pnl'] if theoretical_simulation else 0
+    theoretical_hours = theoretical_simulation['hours_operated'] if theoretical_simulation else 0
+    theoretical_win_rate = theoretical_simulation['win_rate'] if theoretical_simulation else 0
+    
+    return {
+        'real': {
+            'pnl': real_pnl,
+            'hours': real_hours,
+            'win_rate': real_win_rate,
+            'operations': len(real_operations)
+        },
+        'theoretical': {
+            'pnl': theoretical_pnl,
+            'hours': theoretical_hours,
+            'win_rate': theoretical_win_rate
+        },
+        'difference': {
+            'pnl': real_pnl - theoretical_pnl,
+            'pnl_percent': ((real_pnl - theoretical_pnl) / abs(theoretical_pnl) * 100) if theoretical_pnl != 0 else 0,
+            'hours': real_hours - theoretical_hours,
+            'win_rate': real_win_rate - theoretical_win_rate
+        }
+    }
+
+def render_trading_log_interface(selected_date, df):
+    """Renderiza a interface expandida de trading log no sidebar."""
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📝 Registro de Operação Real")
+    
+    # Carregar log existente
+    trading_log = load_trading_log(selected_date)
+    
+    # Status da sessão
+    session_saved = len(trading_log) > 0
+    if session_saved:
+        st.sidebar.success("✅ Sessão já registrada")
+        if st.sidebar.button("🔄 Editar/Atualizar"):
+            st.session_state.editing_log = True
+    else:
+        st.sidebar.info("📝 Registrar nova sessão")
+        st.session_state.editing_log = True
+    
+    # Interface de edição
+    if st.session_state.get('editing_log', False):
+        st.sidebar.markdown("### 🎯 Configuração da Sessão")
+        
+        # Seleção do horário de operação
+        available_hours = sorted(df['hour'].unique())
+        if len(available_hours) == 0:
+            st.sidebar.warning("❌ Nenhum sinal disponível para esta data")
+            return None
+        
+        selected_hours = st.sidebar.multiselect(
+            "⏰ Horários operados:",
+            options=available_hours,
+            default=available_hours[:1] if len(available_hours) > 0 else [],
+            format_func=lambda x: f"{x}:00-{x+1}:00"
+        )
+        
+        if not selected_hours:
+            st.sidebar.warning("⚠️ Selecione pelo menos um horário")
+            return None
+        
+        # Estratégia usada
+        strategy_used = st.sidebar.selectbox(
+            "🎲 Estratégia utilizada:",
+            ["Martingale Conservative", "Infinity Conservative", "Estratégia Própria", "Mista"]
+        )
+        
+        # Container para operações de cada hora
+        all_operations_data = []
+        total_pnl = 0
+        
+        for hour in selected_hours:
+            st.sidebar.markdown(f"#### 🕐 {hour}:00-{hour+1}:00")
+            
+            # Sinais da hora
+            hour_signals = df[df['hour'] == hour].sort_values('timestamp')
+            
+            if len(hour_signals) == 0:
+                st.sidebar.warning(f"Nenhum sinal disponível para {hour}:00")
+                continue
+            
+            # Operações da hora
+            hour_operations = []
+            
+            for idx, (_, signal) in enumerate(hour_signals.iterrows()):
+                timestamp_str = signal['timestamp'].strftime('%H:%M')
+                
+                col1, col2 = st.sidebar.columns([3, 1])
+                
+                with col1:
+                    # Checkbox para operação executada
+                    executed = st.checkbox(
+                        f"{signal['asset']} {timestamp_str}",
+                        key=f"exec_{selected_date}_{hour}_{idx}",
+                        help=f"Resultado original: {signal['result']} (Tent. {signal['attempt']})"
+                    )
+                
+                with col2:
+                    if executed:
+                        # Input de valor apostado
+                        default_amount = 4.0 if signal['attempt'] == 1 else (8.0 if signal['attempt'] == 2 else 16.0)
+                        amount = st.number_input(
+                            "$",
+                            min_value=0.0,
+                            value=default_amount,
+                            step=0.5,
+                            key=f"amount_{selected_date}_{hour}_{idx}"
+                        )
+                        
+                        # Calcular P&L baseado no resultado
+                        if signal['result'] == 'W':
+                            pnl = amount
+                        else:
+                            pnl = -amount
+                        
+                        hour_operations.append({
+                            'timestamp': timestamp_str,
+                            'asset': signal['asset'],
+                            'result': signal['result'],
+                            'attempt': signal['attempt'],
+                            'amount_bet': amount,
+                            'executed': executed,
+                            'pnl': pnl
+                        })
+                        
+                        total_pnl += pnl
+            
+            # P&L da hora
+            hour_pnl = sum(op['pnl'] for op in hour_operations if op['executed'])
+            if len([op for op in hour_operations if op['executed']]) > 0:
+                color = "normal" if hour_pnl >= 0 else "inverse"
+                st.sidebar.metric(f"P&L {hour}:00", f"${hour_pnl:.2f}")
+            
+            all_operations_data.extend(hour_operations)
+        
+        # P&L Total
+        st.sidebar.markdown("---")
+        color = "normal" if total_pnl >= 0 else "inverse"
+        st.sidebar.metric("💰 P&L Total", f"${total_pnl:.2f}")
+        
+        # Notas da sessão
+        notes = st.sidebar.text_area(
+            "📝 Notas da sessão:",
+            placeholder="Observações, motivos de pausa, etc.",
+            key=f"notes_{selected_date}"
+        )
+        
+        # Validação
+        all_hour_signals = df[df['hour'].isin(selected_hours)]
+        warnings = validate_trading_log_data(all_operations_data, all_hour_signals)
+        
+        if warnings:
+            st.sidebar.warning("⚠️ Avisos de Validação:")
+            for warning in warnings:
+                st.sidebar.write(f"• {warning}")
+        
+        # Botão de salvar
+        if st.sidebar.button("💾 Salvar Registro", type="primary"):
+            # Preparar DataFrame
+            log_data = []
+            for hour in selected_hours:
+                for op in all_operations_data:
+                    if op['timestamp'].startswith(f"{hour:02d}:"):
+                        log_data.append({
+                            'date': selected_date.strftime('%Y-%m-%d'),
+                            'hour_start': hour,
+                            'hour_end': hour + 1,
+                            'timestamp': op['timestamp'],
+                            'asset': op['asset'],
+                            'result': op['result'],
+                            'attempt': op['attempt'],
+                            'amount_bet': op['amount_bet'],
+                            'executed': op['executed'],
+                            'pnl': op['pnl'],
+                            'strategy_used': strategy_used,
+                            'notes': notes
+                        })
+            
+            # Salvar
+            if log_data:
+                new_log = pd.DataFrame(log_data)
+                saved_path = save_trading_log(new_log, selected_date)
+                st.sidebar.success(f"✅ Registro salvo!")
+                st.session_state.editing_log = False
+                st.rerun()
+            else:
+                st.sidebar.warning("⚠️ Nenhuma operação registrada")
+    
+    return trading_log
+
 def main():
-    st.title("Telegram Trading Signals")
-    st.markdown("*Análise de performance e recomendações estratégicas*")
-    
-    # Sidebar
-    st.sidebar.header("Configurações")
-    
-    # Buscar arquivos
-    data_path = Path("data/trading ops")
-    available_files = []
-    
-    if data_path.exists():
-        for month_dir in data_path.iterdir():
-            if month_dir.is_dir():
-                for day_dir in month_dir.iterdir():
-                    if day_dir.is_dir():
-                        daily_ops = day_dir / "daily ops"
-                        if daily_ops.exists():
-                            for file in daily_ops.glob("signals_*.csv"):
-                                available_files.append(str(file))
-    
-    if not available_files:
-        st.error("Nenhum arquivo encontrado!")
-        return
-    
-    # Seleção de arquivo
-    selected_file = st.sidebar.selectbox(
-        "Selecione o arquivo:",
-        available_files,
-        index=0
+    """Função principal do dashboard."""
+    st.set_page_config(
+        page_title="📊 Dashboard Trading",
+        page_icon="📈",
+        layout="wide"
     )
     
-    # Carregar dados
+    st.title("📊 Dashboard de Análise de Trading")
+    st.markdown("Análise detalhada dos sinais coletados e performance das estratégias")
+    
+    # Sidebar para controle de data e configurações
+    with st.sidebar:
+        st.header("⚙️ Configurações")
+        
+        # Seleção de data
+        selected_date = st.date_input(
+            "Selecionar Data",
+            value=datetime.now().date()
+        )
+        
+        # NOVA FUNCIONALIDADE: Controle de operação real
+        st.subheader("📈 Status de Operação")
+        st.info("💡 Informe se você realmente operou neste dia para simulações mais precisas")
+        
+        really_traded = st.radio(
+            "Você operou neste dia?",
+            ("Não definido", "Sim, operei", "Não, pausei"),
+            help="Isso afetará as simulações financeiras mostradas no dashboard"
+        )
+        
+        # Configurações adicionais baseadas na escolha
+        if really_traded == "Sim, operei":
+            st.success("✅ Simulações mostram resultado real")
+            # Opcional: permitir definir estratégia específica usada
+            strategy_used = st.selectbox(
+                "Estratégia utilizada:",
+                ("Auto (baseado na recomendação)", "Martingale Conservative", "Infinity Conservative"),
+                help="Estratégia que você realmente usou durante o trading"
+            )
+        elif really_traded == "Não, pausei":
+            st.warning("⏸️ Dashboard mostrará apenas análise, sem simulação de P&L")
+            pause_reason = st.text_area(
+                "Motivo da pausa (opcional):",
+                placeholder="Ex: Volume baixo, mercado instável, etc."
+            )
+        else:
+            st.info("🔍 Dashboard mostra simulação teórica padrão")
+    
+    # Carregar dados - buscar na estrutura de pastas
+    month_name = selected_date.strftime('%B')  # Nome do mês em inglês
+    day = selected_date.day
+    filename = f"signals_{selected_date.strftime('%Y-%m-%d')}.csv"
+    
+    # Tentar diferentes caminhos possíveis
+    possible_paths = [
+        f"data/trading ops/{month_name}/{day}/daily ops/{filename}",
+        f"data/trading ops/{month_name}/{day:02d}/daily ops/{filename}",
+        f"data/trading ops/{month_name}/{day}/06/{filename}",  # Estrutura alternativa
+        f"data/trading ops/{month_name}/{day:02d}/06/{filename}",  # Estrutura alternativa com zero
+        f"data/{filename}",  # Fallback para estrutura antiga
+        f"data/signals_{selected_date.strftime('%Y-%m-%d')}.csv"  # Fallback original
+    ]
+    
+    file_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            file_path = path
+            break
+    
+    # Verificar se arquivo existe
+    if file_path is None:
+        st.error(f"❌ Arquivo não encontrado para a data {selected_date.strftime('%d/%m/%Y')}")
+        st.info("💡 Execute primeiro o sistema de coleta para gerar os dados.")
+        
+        with st.expander("🔍 Ver caminhos verificados"):
+            st.write("O dashboard tentou encontrar o arquivo nos seguintes locais:")
+            for i, path in enumerate(possible_paths, 1):
+                st.write(f"{i}. `{path}`")
+            st.write("\n**💡 Dica:** Os dados são salvos automaticamente na estrutura:")
+            st.code("data/trading ops/{Mês}/{Dia}/daily ops/signals_YYYY-MM-DD.csv")
+        return
+    
+    # Carregar dados com base na configuração de operação
     with st.spinner("Carregando dados..."):
-        df = load_data(selected_file)
+        df = load_data(file_path)
         metrics = calculate_metrics(df)
         hourly_analysis = calculate_hourly_analysis(df)
-        financial_metrics = calculate_financial_metrics(df)
-        hourly_financial_analysis = calculate_hourly_financial_analysis(df)
-        realistic_financial_metrics = calculate_realistic_financial_metrics(df)
-        simulation_result = simulate_realistic_trading_day(df)
-        realistic_daily_summary = calculate_realistic_daily_summary(simulation_result)
-        real_operations_stats = calculate_real_operations_stats(df, simulation_result)
+        
+        # Mostrar dados diferentes baseado no status de operação
+        if really_traded == "Não, pausei":
+            # Apenas análise, sem simulação financeira
+            financial_metrics = None
+            simulation_result = None
+            realistic_daily_summary = {
+                'total_pnl': 0,
+                'target_achieved': False,
+                'stop_hit': False,
+                'end_reason': 'Não operou - mercado pausado',
+                'hours_operated': 0,
+                'win_rate': 0,
+                'avg_pnl_per_hour': 0
+            }
+        else:
+            # Simulação normal
+            financial_metrics = calculate_financial_metrics(df)
+            realistic_financial_metrics = calculate_realistic_financial_metrics(df)
+            simulation_result = simulate_realistic_trading_day(df)
+            realistic_daily_summary = calculate_realistic_daily_summary(simulation_result)
     
-    # Extrair data
-    date_str = Path(selected_file).stem.replace('signals_', '')
-    st.sidebar.success(f"Data: {date_str}")
+    # Interface principal
+    st.sidebar.success(f"📅 Data: {selected_date.strftime('%d/%m/%Y')}")
     st.sidebar.metric("Total de Sinais", len(df))
     
-    # === SEÇÃO 1: RESUMO GERAL ===
-    st.subheader("Resumo Geral")
+    # Mostrar status baseado na configuração
+    if really_traded == "Sim, operei":
+        st.sidebar.success("✅ Operou neste dia")
+    elif really_traded == "Não, pausei":
+        st.sidebar.warning("⏸️ Não operou neste dia")
+        if 'pause_reason' in locals() and pause_reason:
+            st.sidebar.write(f"**Motivo:** {pause_reason}")
+    else:
+        st.sidebar.info("🔍 Simulação teórica")
     
-    # Primeira linha: Total e Wins
-    col1, col2 = st.columns(2)
+    # === SISTEMA DE TRADING LOG REAL ===
+    # Renderizar interface quando "operei" estiver selecionado
+    trading_log = None
+    if really_traded == "Sim, operei":
+        trading_log = render_trading_log_interface(selected_date, df)
+    
+    # === SEÇÃO 1: RESUMO GERAL ===
+    st.subheader("📊 Resumo Geral")
+    
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total de Sinais", metrics['total_signals'])
     with col2:
         st.metric("Wins Totais", metrics['wins'], f"{metrics['win_rate']:.1f}% Win Rate")
-    
-    # Segunda linha: Breakdown por tentativas
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("First Attempt Wins", metrics['first_attempt_wins'], f"{metrics['first_attempt_rate']:.1f}%")
-    with col2:
-        st.metric("G1 Wins", metrics['g1_wins'], f"{metrics['g1_recovery_rate']:.1f}%")
     with col3:
-        st.metric("G2 Wins", metrics['g2_wins'], f"{metrics['g2_recovery_rate']:.1f}%")
+        st.metric("1ª Tentativa", metrics['first_attempt_wins'], f"{metrics['first_attempt_rate']:.1f}%")
     with col4:
         st.metric("Losses", metrics['losses'], f"{metrics['loss_rate']:.1f}%")
     
-    # === SEÇÃO 1.5: SIMULAÇÃO REALISTA DE TRADING ===
-    st.subheader("Performance Diária (17h-24h)")
+    # === SEÇÃO 2: PERFORMANCE DIÁRIA ===
+    st.subheader("💰 Performance Diária")
     
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        pnl_color = "normal" if realistic_daily_summary['total_pnl'] >= 0 else "inverse"
-        target_status = "🎯" if realistic_daily_summary['target_achieved'] else "❌"
-        st.metric("P&L Real", f"${realistic_daily_summary['total_pnl']:.2f}", 
-                 f"{target_status} Meta: $12.00")
-    with col2:
-        st.metric("Horas Operadas", realistic_daily_summary['hours_operated'], 
-                 f"Win Rate: {realistic_daily_summary['win_rate']:.1f}%")
-    with col3:
-        avg_pnl = realistic_daily_summary['avg_pnl_per_hour']
-        st.metric("P&L Médio/Hora", f"${avg_pnl:.2f}", 
-                 f"de 17h às 24h")
-    with col4:
-        status_icon = "🎯" if realistic_daily_summary['target_achieved'] else ("🛑" if realistic_daily_summary['stop_hit'] else "⏰")
-        st.metric("Status do Dia", status_icon, 
-                 realistic_daily_summary['end_reason'].split(':')[0])
-    
-    # Mostrar detalhes da simulação
-    st.markdown("**Resultado da Simulação:**")
-    if realistic_daily_summary['target_achieved']:
-        st.success(f"✅ {realistic_daily_summary['end_reason']}")
-    elif realistic_daily_summary['stop_hit']:
-        st.error(f"🛑 {realistic_daily_summary['end_reason']}")
+    if really_traded == "Não, pausei":
+        # Mostrar análise sem performance financeira
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info("⏸️ **Dia pausado** - Nenhuma operação realizada")
+            st.write("**Motivo:** Condições desfavoráveis identificadas")
+        with col2:
+            st.metric("P&L Real", "$0.00", "Não operou")
+            
+        # Mostrar o que teria acontecido se operasse
+        if st.checkbox("🔍 Ver simulação hipotética (se tivesse operado)"):
+            temp_simulation = simulate_realistic_trading_day(df)
+            temp_summary = calculate_realistic_daily_summary(temp_simulation)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info("💭 **Resultado hipotético:**")
+                pnl_color = "normal" if temp_summary['total_pnl'] >= 0 else "inverse"
+                st.metric("P&L Hipotético", f"${temp_summary['total_pnl']:.2f}")
+            with col2:
+                if temp_summary['target_achieved']:
+                    st.success("✅ Teria atingido a meta")
+                elif temp_summary['stop_hit']:
+                    st.error("🛑 Teria acionado stop")
+                else:
+                    st.warning("⏰ Teria encerrado no horário")
     else:
-        st.info(f"⏰ {realistic_daily_summary['end_reason']}")
-    
-    # Estratégias utilizadas
-    if realistic_daily_summary['strategies_used']:
-        strategies_text = ", ".join([f"{k}: {v}h" for k, v in realistic_daily_summary['strategies_used'].items()])
-        st.write(f"**Estratégias utilizadas:** {strategies_text}")
-    
-    # === SEÇÃO 2: BREAKDOWN DETALHADO ===
-    st.subheader("Breakdown Detalhado de Assertividade")
-    
-    # Tabela de performance por tentativa
-    st.markdown("**Performance por Tentativa:**")
-    breakdown_data = {
-        'Tentativa': ['1ª Tentativa (WIN)', 'G1 Recovery (WIN)', 'G2 Recovery (WIN)', 'Loss (após G2)'],
-        'Quantidade': [
-            metrics['first_attempt_wins'],
-            metrics['g1_wins'], 
-            metrics['g2_wins'],
-            metrics['losses']
-        ],
-        'Percentual': [
-            f"{metrics['first_attempt_rate']:.1f}%",
-            f"{metrics['g1_recovery_rate']:.1f}%",
-            f"{metrics['g2_recovery_rate']:.1f}%",
-            f"{metrics['loss_rate']:.1f}%"
-        ]
-    }
-    breakdown_df = pd.DataFrame(breakdown_data)
-    st.dataframe(breakdown_df, hide_index=True, use_container_width=True)
-    
-    # Gráfico de breakdown (pizza)
-    st.markdown("**Distribuição Visual:**")
-    fig_breakdown = px.pie(
-        values=[metrics['first_attempt_wins'], metrics['g1_wins'], metrics['g2_wins'], metrics['losses']],
-        names=['1ª Tentativa WIN', 'G1 Recovery', 'G2 Recovery', 'Loss'],
-        title="Distribuição de Resultados por Tentativa",
-        color_discrete_sequence=['#2E8B57', '#32CD32', '#90EE90', '#DC143C']
-    )
-    fig_breakdown.update_layout(height=500)
-    st.plotly_chart(fig_breakdown, use_container_width=True)
+        # Performance normal
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            pnl_color = "normal" if realistic_daily_summary['total_pnl'] >= 0 else "inverse"
+            target_status = "🎯" if realistic_daily_summary['target_achieved'] else "❌"
+            st.metric("P&L Total", f"${realistic_daily_summary['total_pnl']:.2f}", 
+                     f"{target_status} Meta: $12.00")
+        with col2:
+            st.metric("Horas Operadas", realistic_daily_summary['hours_operated'], 
+                     f"Win Rate: {realistic_daily_summary['win_rate']:.1f}%")
+        with col3:
+            avg_pnl = realistic_daily_summary['avg_pnl_per_hour']
+            st.metric("P&L Médio/Hora", f"${avg_pnl:.2f}")
+        with col4:
+            status_icon = "🎯" if realistic_daily_summary['target_achieved'] else ("🛑" if realistic_daily_summary['stop_hit'] else "⏰")
+            st.metric("Status", status_icon, realistic_daily_summary['end_reason'].split(':')[0])
     
     # === SEÇÃO 3: RECOMENDAÇÃO ===
-    st.subheader("Recomendação de Estratégia")
+    st.subheader("🎯 Recomendação de Estratégia")
     strategy = recommend_strategy(metrics)
     
     col1, col2 = st.columns([2, 1])
     with col1:
         st.markdown(f"### **{strategy}**")
         st.write(f"**Base de análise:** {metrics['total_signals']} sinais")
-        st.write(f"**Critérios:** 1ª Tentativa: {metrics['first_attempt_rate']:.1f}% | G1 Recovery: {metrics['g1_recovery_rate']:.1f}% | Losses: {metrics['loss_rate']:.1f}%")
+        st.write(f"**Métricas:** 1ª: {metrics['first_attempt_rate']:.1f}% | G1: {metrics['g1_recovery_rate']:.1f}% | Losses: {metrics['loss_rate']:.1f}%")
     
     with col2:
-        # Mostrar lógica da recomendação
-        st.markdown("**Lógica de Decisão:**")
-        if metrics['loss_rate'] > 30:
-            st.error("Losses > 30% → PAUSE")
-        elif metrics['g1_recovery_rate'] > 15 and metrics['first_attempt_rate'] < 60:
-            st.success("G1 > 15% e 1ª < 60% → Martingale")
-        elif metrics['first_attempt_rate'] > 50:
-            st.success("1ª Tentativa > 50% → Infinity")
-        else:
-            st.warning("Critérios não atendidos → Aguardar")
+        # Mostrar consistência com script principal
+        if really_traded == "Sim, operei" and 'strategy_used' in locals():
+            if strategy_used != "Auto (baseado na recomendação)":
+                st.info(f"✅ Estratégia usada: {strategy_used}")
+                if strategy_used.replace(" ", "_").upper() != strategy.replace(" ", "_").upper():
+                    st.warning("⚠️ Diferente da recomendação")
     
     # === SEÇÃO 4: ANÁLISES DETALHADAS ===
-    if st.checkbox("Mostrar Análises Detalhadas", value=False):
+    if st.checkbox("📈 Mostrar Análises Detalhadas", value=True):
         
-        # Análise por hora com recomendações
-        st.subheader("Análise por Hora com Recomendações de Estratégia")
+        # Análise por hora
+        st.subheader("⏰ Análise por Hora")
         
         col1, col2 = st.columns(2)
         
@@ -872,8 +1225,7 @@ def main():
                 x='hour', 
                 y='win_rate',
                 title='Win Rate por Hora',
-                markers=True,
-                line_shape='linear'
+                markers=True
             )
             fig_hourly.update_layout(
                 xaxis_title="Hora do Dia",
@@ -883,345 +1235,148 @@ def main():
             st.plotly_chart(fig_hourly, use_container_width=True)
         
         with col2:
-            # Gráfico de estratégias recomendadas por hora
+            # Estratégias recomendadas
             strategy_counts = hourly_analysis['strategy'].value_counts()
-            fig_strategies = px.bar(
-                x=strategy_counts.index,
-                y=strategy_counts.values,
-                title='Estratégias Recomendadas por Hora',
-                color=strategy_counts.values,
-                color_continuous_scale='viridis'
-            )
-            fig_strategies.update_layout(
-                xaxis_title="Estratégia",
-                yaxis_title="Número de Horas"
+            fig_strategies = px.pie(
+                values=strategy_counts.values,
+                names=strategy_counts.index,
+                title='Estratégias Recomendadas por Hora'
             )
             st.plotly_chart(fig_strategies, use_container_width=True)
         
-        # Tabela detalhada por hora
-        st.subheader("Detalhamento por Hora")
-        
-        # Formatar tabela para exibição
+        # Tabela detalhada
+        st.subheader("📋 Detalhamento por Hora")
         display_hourly = hourly_analysis.copy()
         display_hourly['win_rate'] = display_hourly['win_rate'].round(1)
         display_hourly['first_rate'] = display_hourly['first_rate'].round(1)
         display_hourly['g1_rate'] = display_hourly['g1_rate'].round(1)
         display_hourly['loss_rate'] = display_hourly['loss_rate'].round(1)
         
-        display_hourly.columns = ['Hora', 'Total', 'Wins', 'Win Rate %', '1ª Tent %', 'G1 Rec %', 'Loss %', 'Estratégia Recomendada', 'Resultado']
-        
+        display_hourly.columns = ['Hora', 'Total', 'Wins', 'Win Rate %', '1ª Tent %', 'G1 Rec %', 'Loss %', 'Estratégia', 'Resultado']
         st.dataframe(display_hourly, hide_index=True, use_container_width=True)
-        
-        # Performance por ativo
-        st.subheader("Performance por Ativo")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            asset_stats = df.groupby('asset')['result'].agg(['count', lambda x: (x == 'W').sum()])
-            asset_stats.columns = ['total', 'wins']
-            asset_stats['win_rate'] = (asset_stats['wins'] / asset_stats['total'] * 100).round(1)
-            asset_stats = asset_stats.reset_index().sort_values('win_rate', ascending=False)
-            
-            fig_assets = px.bar(
-                asset_stats, 
-                x='asset', 
-                y='win_rate',
-                title='Win Rate por Ativo',
-                color='win_rate',
-                color_continuous_scale='RdYlGn'
-            )
-            st.plotly_chart(fig_assets, use_container_width=True)
-        
-        with col2:
-            st.write("**Estatísticas por Ativo:**")
-            asset_display = asset_stats.copy()
-            asset_display.columns = ['Ativo', 'Total', 'Wins', 'Win Rate %']
-            st.dataframe(asset_display, hide_index=True)
-            
-            # Encontrar hora onde meta foi atingida
-            if len(hourly_analysis) > 0:
-                # Verificar se meta foi atingida na simulação
-                target_achieved_hour = None
-                for _, log_entry in simulation_result['trading_log'].iterrows():
-                    if log_entry['cumulative_pnl'] >= 12.0:  # Meta de $12
-                        target_achieved_hour = log_entry['hour']
-                        break
-                
-                if target_achieved_hour is not None:
-                    st.write(f"**Operações da Hora da Meta ({target_achieved_hour}:00h - Meta atingida com ${simulation_result['trading_log'][simulation_result['trading_log']['hour'] == target_achieved_hour]['cumulative_pnl'].iloc[-1]:.2f}):**")
-                    
-                    # Filtrar operações da hora da meta
-                    target_hour_ops = df[df['hour'] == target_achieved_hour].nlargest(10, 'timestamp')[['timestamp', 'asset', 'result', 'attempt']]
-                    target_hour_ops['timestamp'] = target_hour_ops['timestamp'].dt.strftime('%H:%M')
-                    target_hour_ops.columns = ['Horário', 'Ativo', 'Resultado', 'Tentativa']
-                    st.dataframe(target_hour_ops, hide_index=True)
-                else:
-                    # Se meta não foi atingida, mostrar melhor hora como fallback
-                    best_hour_data = hourly_analysis.sort_values(['win_rate', 'total'], ascending=[False, False]).iloc[0]
-                    best_hour = int(best_hour_data['hour'])
-                    best_win_rate = best_hour_data['win_rate']
-                    best_total = int(best_hour_data['total'])
-                    
-                    st.write(f"**Meta não atingida - Melhor Hora ({best_hour}:00h - {best_win_rate:.1f}% WR, {best_total} ops):**")
-                    
-                    # Filtrar operações da melhor hora
-                    best_hour_ops = df[df['hour'] == best_hour].nlargest(10, 'timestamp')[['timestamp', 'asset', 'result', 'attempt']]
-                    best_hour_ops['timestamp'] = best_hour_ops['timestamp'].dt.strftime('%H:%M')
-                    best_hour_ops.columns = ['Horário', 'Ativo', 'Resultado', 'Tentativa']
-                    st.dataframe(best_hour_ops, hide_index=True)
-
-    # === SEÇÃO 5: ANÁLISES FINANCEIRAS REALISTAS ===
-    if st.checkbox("Mostrar Análises Financeiras", value=False):
-        st.subheader("Análises Financeiras por Estratégia")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Gráfico de P&L por hora (estratégias)
-            fig_pnl_strategy = px.bar(
-                realistic_financial_metrics, 
-                x='hour', 
-                y='pnl',
-                title='P&L por Hora (Estratégias Aplicadas)',
-                color='pnl',
-                color_continuous_scale='RdYlGn',
-                hover_data=['strategy', 'strategy_result']
-            )
-            fig_pnl_strategy.update_layout(
-                xaxis_title="Hora do Dia",
-                yaxis_title="P&L ($)"
-            )
-            st.plotly_chart(fig_pnl_strategy, use_container_width=True)
-        
-        with col2:
-            # Gráfico de ROI por hora
-            fig_roi_strategy = px.line(
-                realistic_financial_metrics, 
-                x='hour', 
-                y='roi',
-                title='ROI por Hora',
-                markers=True,
-                line_shape='linear'
-            )
-            fig_roi_strategy.update_layout(
-                xaxis_title="Hora do Dia",
-                yaxis_title="ROI (%)"
-            )
-            st.plotly_chart(fig_roi_strategy, use_container_width=True)
-        
-        # Distribuição de estratégias
-        st.subheader("Distribuição de Estratégias e Resultados")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Gráfico de pizza - estratégias usadas
-            strategy_counts = realistic_financial_metrics['strategy'].value_counts()
-            fig_strategies = px.pie(
-                values=strategy_counts.values,
-                names=strategy_counts.index,
-                title='Distribuição de Estratégias por Hora'
-            )
-            st.plotly_chart(fig_strategies, use_container_width=True)
-        
-        with col2:
-            # Gráfico de pizza - resultados
-            result_counts = realistic_financial_metrics['strategy_result'].value_counts()
-            fig_results = px.pie(
-                values=result_counts.values,
-                names=result_counts.index,
-                title='Distribuição de Resultados'
-            )
-            st.plotly_chart(fig_results, use_container_width=True)
-        
-        # Tabela detalhada financeira por hora
-        st.subheader("Detalhamento Financeiro por Estratégia")
-        
-        # Formatar tabela financeira realista
-        display_realistic = realistic_financial_metrics.copy()
-        display_realistic['pnl'] = display_realistic['pnl'].round(2)
-        display_realistic['roi'] = display_realistic['roi'].round(2)
-        display_realistic['win_rate'] = display_realistic['win_rate'].round(1)
-        
-        display_realistic.columns = ['Hora', 'Sinais', 'Win Rate %', 'Estratégia', 'Resultado', 'P&L ($)', 'ROI (%)']
-        
-        st.dataframe(display_realistic, hide_index=True, use_container_width=True)
-        
-        # Análise de performance por estratégia
-        st.subheader("Performance por Estratégia")
-        
-        # Agrupar por estratégia
-        strategy_performance = realistic_financial_metrics.groupby('strategy').agg({
-            'pnl': ['sum', 'mean', 'count'],
-            'roi': 'mean'
-        }).round(2)
-        
-        strategy_performance.columns = ['P&L Total', 'P&L Médio', 'Horas Usada', 'ROI Médio']
-        strategy_performance = strategy_performance.reset_index()
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Performance por Estratégia:**")
-            st.dataframe(strategy_performance, hide_index=True, use_container_width=True)
-        
-        with col2:
-            st.markdown("**Interpretação:**")
-            
-            # Encontrar melhor estratégia
-            best_strategy = strategy_performance.loc[strategy_performance['P&L Total'].idxmax()]
-            st.success(f"🏆 Melhor estratégia: {best_strategy['strategy']}")
-            st.info(f"📊 P&L Total: ${best_strategy['P&L Total']:.2f}")
-            st.info(f"📈 ROI Médio: {best_strategy['ROI Médio']:.2f}%")
-            
-            # Resumo do dia
-            if realistic_daily_summary['total_pnl'] > 0:
-                st.success(f"💚 Dia positivo: +${realistic_daily_summary['total_pnl']:.2f}")
-            else:
-                st.error(f"🔴 Dia negativo: ${realistic_daily_summary['total_pnl']:.2f}")
-            
-            # Calcular win rate das horas operadas
-            operations_count = realistic_daily_summary['hours_operated']
-            winning_hours = len([h for h in simulation_result['trading_log'].iterrows() if h[1]['pnl'] > 0])
-            win_rate_hours = (winning_hours / operations_count * 100) if operations_count > 0 else 0
-            st.info(f"⏰ Taxa de sucesso: {win_rate_hours:.1f}% das horas operadas")
     
-    # === SEÇÃO 6: LOG DA SIMULAÇÃO REALISTA ===
-    if st.checkbox("Mostrar Log da Simulação Realista", value=False):
-        st.subheader("Log Detalhado da Simulação")
-        
-        # Log completo da simulação (largura total)
-        st.markdown("**Cronologia das Operações:**")
-        
-        # Formatar o log para exibição
-        display_log = simulation_result['trading_log'].copy()
-        
-        # Adicionar formatação
-        display_log['hour_formatted'] = display_log['hour'].apply(lambda x: f"{x}:00h")
-        display_log['pnl_formatted'] = display_log['pnl'].apply(lambda x: f"${x:.2f}" if x != 0 else "-")
-        display_log['cumulative_formatted'] = display_log['cumulative_pnl'].apply(lambda x: f"${x:.2f}")
-        
-        # Selecionar colunas para exibir
-        display_columns = ['hour_formatted', 'strategy', 'action', 'pnl_formatted', 'cumulative_formatted', 'reason']
-        display_log_filtered = display_log[display_columns]
-        display_log_filtered.columns = ['Hora', 'Estratégia', 'Ação', 'P&L', 'P&L Acum.', 'Status']
-        
-        st.dataframe(display_log_filtered, hide_index=True, use_container_width=True)
-        
-        # Gráfico da evolução do P&L (largura total, abaixo da tabela)
-        st.markdown("**Evolução do P&L:**")
-        
-        # Criar gráfico de linha do P&L acumulado
-        fig_evolution = px.line(
-            simulation_result['trading_log'],
-            x='hour',
-            y='cumulative_pnl',
-            title='Evolução do P&L ao Longo do Dia',
-            markers=True,
-            line_shape='linear'
-        )
-        
-        # Adicionar linha da meta
-        fig_evolution.add_hline(y=12, line_dash="dash", line_color="green", 
-                               annotation_text="Meta: $12")
-        
-        # Adicionar linhas de stop
-        fig_evolution.add_hline(y=-36, line_dash="dash", line_color="red", 
-                               annotation_text="Stop Martingale: -$36")
-        fig_evolution.add_hline(y=-49, line_dash="dash", line_color="orange", 
-                               annotation_text="Stop Infinity: -$49")
-        
-        fig_evolution.update_layout(
-            xaxis_title="Hora do Dia",
-            yaxis_title="P&L Acumulado ($)",
-            height=500  # Aumentando altura do gráfico
-        )
-        
-        st.plotly_chart(fig_evolution, use_container_width=True)
-        
-        # Resumo das regras aplicadas (abaixo do gráfico)
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Regras da Simulação:**")
-            st.write("• **Horário:** 17h às 23h")
-            st.write("• **Meta diária:** $12.00")
-            st.write("• **Stop Martingale:** -$36 (3 losses em horas diferentes)")
-            st.write("• **Stop Infinity:** -$49 (7 níveis)")
-            st.write("• **Gestão:** Hora anterior como referência")
-            st.write("• **Parada:** Meta, stop ou fim do horário")
-        
-        with col2:
-            st.markdown("**Configurações de Risco:**")
-            st.write("• **Capital base:** $540")
-            st.write("• **Risco Martingale:** 6.7% do capital")
-            st.write("• **Risco Infinity:** 9.1% do capital")
-            st.write("• **Meta diária:** 2.2% do capital")
-            st.write("• **Estratégia:** Conservadora")
-            st.write("• **Win rate esperado:** 78-92%")
-        
-        # Análise de cenários (abaixo das regras)
-        st.subheader("Análise de Cenários")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Operações Realizadas (CSV + Simulação):**")
+    # Análises financeiras apenas se operou ou simulação teórica
+    if really_traded != "Não, pausei" and st.checkbox("💲 Análises Financeiras", value=False):
+        if simulation_result is not None:
+            st.subheader("💰 Simulação Financeira Detalhada")
             
-            if real_operations_stats['total_operations'] > 0:
-                stats_data = {
-                    'Métrica': [
-                        'Total de Operações', 
-                        'Operações Vencedoras', 
-                        'Operações Perdedoras', 
-                        'Win Rate Real'
-                    ],
-                    'Valor': [
-                        real_operations_stats['total_operations'],
-                        real_operations_stats['winning_operations'],
-                        real_operations_stats['losing_operations'],
-                        f"{real_operations_stats['win_rate']:.1f}%"
-                    ]
-                }
-                stats_df = pd.DataFrame(stats_data)
-                st.dataframe(stats_df, hide_index=True, use_container_width=True)
+            # Log da simulação
+            display_log = simulation_result['trading_log'].copy()
+            display_log['hour_formatted'] = display_log['hour'].apply(lambda x: f"{x}:00h")
+            display_log['pnl_formatted'] = display_log['pnl'].apply(lambda x: f"${x:.2f}" if x != 0 else "-")
+            display_log['cumulative_formatted'] = display_log['cumulative_pnl'].apply(lambda x: f"${x:.2f}")
+            
+            display_columns = ['hour_formatted', 'strategy', 'action', 'pnl_formatted', 'cumulative_formatted', 'reason']
+            display_log_filtered = display_log[display_columns]
+            display_log_filtered.columns = ['Hora', 'Estratégia', 'Ação', 'P&L', 'P&L Acum.', 'Status']
+            
+            st.dataframe(display_log_filtered, hide_index=True, use_container_width=True)
+            
+            # Gráfico de evolução
+            fig_evolution = px.line(
+                simulation_result['trading_log'],
+                x='hour',
+                y='cumulative_pnl',
+                title='Evolução do P&L ao Longo do Dia',
+                markers=True
+            )
+            fig_evolution.add_hline(y=12, line_dash="dash", line_color="green", annotation_text="Meta: $12")
+            fig_evolution.add_hline(y=-36, line_dash="dash", line_color="red", annotation_text="Stop: -$36")
+            st.plotly_chart(fig_evolution, use_container_width=True)
+    
+    # === SEÇÃO NOVA: COMPARAÇÃO REAL VS TEÓRICO ===
+    if trading_log is not None and len(trading_log) > 0 and really_traded == "Sim, operei":
+        if st.checkbox("📊 Comparação Real vs Teórico", value=True):
+            st.subheader("🎯 Performance Real vs Simulação Teórica")
+            
+            # Calcular comparação
+            comparison = calculate_real_vs_theoretical_comparison(trading_log, realistic_daily_summary)
+            
+            if comparison:
+                col1, col2, col3 = st.columns(3)
                 
-                # Mostrar detalhes do cálculo
-                st.markdown("**Metodologia:**")
-                st.write("• Baseado nas operações reais do CSV")
-                st.write("• Seguindo gestão da hora anterior")
-                st.write("• Martingale: meta 3 wins ou 1 loss por sessão")
-                st.write("• Infinity: até 2 ciclos (4 ops) por sessão")
-            else:
-                st.info("Nenhuma operação foi realizada neste dia.")
-        
-        with col2:
-            st.markdown("**Interpretação do Resultado:**")
-            
-            if realistic_daily_summary['target_achieved']:
-                st.success("🎯 **Meta Atingida!**")
-                st.write("• Dia bem-sucedido")
-                st.write("• Estratégia eficiente")
-                st.write("• Risco controlado")
-            elif realistic_daily_summary['stop_hit']:
-                st.error("🛑 **Stop Acionado**")
-                st.write("• Dia com perdas")
-                st.write("• Revisar estratégias")
-                st.write("• Controle de risco funcionou")
-            else:
-                if realistic_daily_summary['total_pnl'] > 0:
-                    st.info("📈 **Dia Positivo**")
-                    st.write("• Lucro sem atingir meta")
-                    st.write("• Resultado satisfatório")
-                elif realistic_daily_summary['total_pnl'] < 0:
-                    st.warning("📉 **Dia Negativo**")
-                    st.write("• Prejuízo controlado")
-                    st.write("• Sem acionamento de stop")
+                with col1:
+                    st.markdown("### 💰 Real (Você)")
+                    st.metric("P&L", f"${comparison['real']['pnl']:.2f}")
+                    st.metric("Horas Operadas", f"{comparison['real']['hours']}")
+                    st.metric("Win Rate", f"{comparison['real']['win_rate']:.1f}%")
+                    st.metric("Operações", f"{comparison['real']['operations']}")
+                
+                with col2:
+                    st.markdown("### 🤖 Teórico (Simulação)")
+                    st.metric("P&L", f"${comparison['theoretical']['pnl']:.2f}")
+                    st.metric("Horas", f"{comparison['theoretical']['hours']}")
+                    st.metric("Win Rate", f"{comparison['theoretical']['win_rate']:.1f}%")
+                
+                with col3:
+                    st.markdown("### 📈 Diferença")
+                    diff_pnl = comparison['difference']['pnl']
+                    diff_color = "🟢" if diff_pnl >= 0 else "🔴"
+                    st.metric("P&L", f"{diff_color} ${diff_pnl:.2f}")
+                    
+                    if comparison['difference']['pnl_percent'] != 0:
+                        st.metric("% Diferente", f"{comparison['difference']['pnl_percent']:.1f}%")
+                    
+                    diff_hours = comparison['difference']['hours']
+                    st.metric("Horas", f"{'+'if diff_hours >= 0 else ''}{diff_hours}")
+                    
+                    diff_wr = comparison['difference']['win_rate']
+                    st.metric("Win Rate", f"{'+'if diff_wr >= 0 else ''}{diff_wr:.1f}%")
+                
+                # Análise textual
+                st.markdown("---")
+                st.subheader("🔍 Análise da Performance")
+                
+                if comparison['difference']['pnl'] > 0:
+                    st.success(f"🎉 **Excelente!** Você performou ${comparison['difference']['pnl']:.2f} acima da simulação teórica!")
+                elif comparison['difference']['pnl'] == 0:
+                    st.info("🎯 **Perfeito!** Sua performance foi exatamente igual à simulação teórica.")
                 else:
-                    st.info("➖ **Dia Neutro**")
-                    st.write("• Sem operações ou resultado zero")
-                    st.write("• Mercado desfavorável")
+                    st.warning(f"📉 Você ficou ${abs(comparison['difference']['pnl']):.2f} abaixo da simulação teórica.")
+                
+                # Insights
+                if comparison['real']['hours'] > comparison['theoretical']['hours']:
+                    st.info(f"🕐 Você operou {comparison['difference']['hours']} hora(s) a mais que a simulação")
+                elif comparison['real']['hours'] < comparison['theoretical']['hours']:
+                    st.info(f"⏰ Você operou {abs(comparison['difference']['hours'])} hora(s) a menos que a simulação")
+                
+                # Mostrar log das operações reais
+                if st.checkbox("📋 Ver Log de Operações Reais"):
+                    st.subheader("📝 Operações Registradas")
+                    display_trading_log = trading_log.copy()
+                    display_trading_log = display_trading_log[display_trading_log['executed'] == True]
+                    
+                    if len(display_trading_log) > 0:
+                        display_trading_log['pnl_formatted'] = display_trading_log['pnl'].apply(lambda x: f"${x:.2f}")
+                        display_trading_log['amount_formatted'] = display_trading_log['amount_bet'].apply(lambda x: f"${x:.2f}")
+                        
+                        cols_to_show = ['timestamp', 'asset', 'result', 'attempt', 'amount_formatted', 'pnl_formatted', 'strategy_used']
+                        display_cols = ['Horário', 'Ativo', 'Resultado', 'Tentativa', 'Valor Apostado', 'P&L', 'Estratégia']
+                        
+                        display_trading_log_filtered = display_trading_log[cols_to_show]
+                        display_trading_log_filtered.columns = display_cols
+                        
+                        st.dataframe(display_trading_log_filtered, hide_index=True, use_container_width=True)
+                        
+                        # Resumo das operações reais
+                        total_bet = display_trading_log['amount_bet'].sum()
+                        total_pnl = display_trading_log['pnl'].sum()
+                        win_ops = len(display_trading_log[display_trading_log['pnl'] > 0])
+                        total_ops = len(display_trading_log)
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Total Apostado", f"${total_bet:.2f}")
+                        with col2:
+                            st.metric("P&L Final", f"${total_pnl:.2f}")
+                        with col3:
+                            st.metric("Operações", f"{total_ops}")
+                        with col4:
+                            st.metric("Win Rate Real", f"{(win_ops/total_ops*100):.1f}%")
+                    else:
+                        st.warning("⚠️ Nenhuma operação foi marcada como executada")
+            else:
+                st.warning("⚠️ Não foi possível calcular a comparação. Verifique se o trading log está completo.")
 
 if __name__ == "__main__":
     main() 

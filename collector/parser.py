@@ -422,8 +422,11 @@ class SignalParser:
             return {}
         
         total = len(signals)
-        wins = sum(1 for s in signals if s.result == 'W')
-        losses = sum(1 for s in signals if s.result == 'L')
+        # Conforme estratégias: apenas 1ª tentativa e G1 são wins
+        first_attempt_wins = sum(1 for s in signals if s.result == 'W' and s.attempt == 1)
+        g1_wins = sum(1 for s in signals if s.result == 'W' and s.attempt == 2)
+        wins = first_attempt_wins + g1_wins  # Apenas 1ª tentativa + G1
+        losses = sum(1 for s in signals if s.result == 'L') + sum(1 for s in signals if s.result == 'W' and s.attempt == 3)  # Losses + G2
         
         # Contagem por tentativa
         attempts = {1: 0, 2: 0, 3: 0}

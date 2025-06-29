@@ -17,6 +17,19 @@ Dashboard interativo desenvolvido em Streamlit para análise de performance de s
 - Para quando atinge meta ($12) ou stop loss
 - Considera regras específicas de cada gestão
 
+### 🎮 **Controle de Operação Real** ⭐ **NOVO**
+Interface na sidebar para indicar se você operou realmente:
+- **"Não definido"**: Simulação teórica completa
+- **"Sim, operei"**: 
+  - Mostra P&L real baseado na estratégia selecionada
+  - Permite escolher qual estratégia foi usada
+  - Indica se atingiu meta ou parou por stop loss
+- **"Não, pausei"**: 
+  - P&L = $0 (preservação de capital)
+  - Permite informar motivo da pausa
+  - Opção de ver simulação hipotética
+  - Evita "falsos positivos" de meta atingida
+
 ### 🔄 **Estratégias Implementadas**
 
 #### **Martingale Conservative**
@@ -66,8 +79,9 @@ python3 -m streamlit run dashboard.py
 
 ### **Seleção de Dados**
 1. Use a sidebar para selecionar arquivo de sinais
-2. Dados são carregados automaticamente de `data/trading ops/`
-3. Formato esperado: `signals_YYYY-MM-DD.csv`
+2. **Configure seu status de operação** (Não definido/Sim, operei/Não, pausei) ⭐
+3. Dados são carregados automaticamente de `data/trading ops/`
+4. Formato esperado: `signals_YYYY-MM-DD.csv`
 
 ## 📁 **Estrutura de Dados**
 
@@ -95,21 +109,29 @@ data/
 - **Meta diária**: $12.00
 - **Valores de aposta**: $4 (1ª), $8 (G1), $16 (G2)
 
-### **Critérios de Recomendação**
-- **PAUSE**: Loss rate > 30%
-- **Martingale Conservative**: G1 > 15% e 1ª < 60%
-- **Infinity Conservative**: 1ª tentativa > 50%
-- **Aguardar**: Outros casos
+### **Critérios de Recomendação** ⭐ **UNIFICADOS**
+- **PAUSE**: 
+  - Total < 10 operações (dados insuficientes)
+  - G2+STOP > 30% (condições desfavoráveis)
+- **Martingale Conservative**: G1 recovery > 65%
+- **Infinity Conservative**: 1ª tentativa > 60%
+- **Default**: Infinity Conservative
+
+### **Cálculo de Win Rate** ⭐ **CORRIGIDO**
+- **Wins**: Apenas 1ª tentativa + G1 (recuperação)
+- **Losses**: G2 + STOP
+- **G1 Rate**: Taxa de recuperação relativa = (G1 wins / max(1, total - 1ª wins)) * 100
 
 ## 📊 **Seções do Dashboard**
 
 1. **Resumo Geral**: Métricas principais
 2. **Performance Diária**: Simulação realista 17h-24h
-3. **Breakdown Detalhado**: Distribuição por tentativas
-4. **Recomendação**: Estratégia sugerida com lógica
-5. **Análises Detalhadas**: Performance por hora e ativo
-6. **Análises Financeiras**: P&L por estratégia
-7. **Log da Simulação**: Cronologia e evolução
+3. **Controle de Operação**: Status real vs. teórico ⭐ **NOVO**
+4. **Breakdown Detalhado**: Distribuição por tentativas
+5. **Recomendação**: Estratégia sugerida com lógica unificada
+6. **Análises Detalhadas**: Performance por hora e ativo
+7. **Análises Financeiras**: P&L por estratégia
+8. **Log da Simulação**: Cronologia e evolução
 
 ## 🔧 **Recursos Técnicos**
 
@@ -124,6 +146,7 @@ data/
 - Considera gestão da hora anterior
 - Para em condições reais (meta/stop)
 - Conta operações individuais do CSV
+- **Suporte para operação real vs. teórica** ⭐
 
 ### **Visualizações**
 - Gráficos de linha para evolução temporal
@@ -137,6 +160,13 @@ data/
 - Verificar se teria atingido meta no dia
 - Identificar melhor estratégia para o período
 - Analisar operações da hora de sucesso
+- **Comparar resultado real vs. teórico** ⭐
+
+### **Controle de Performance Real** ⭐ **NOVO**
+- Registrar se operou ou pausou
+- Acompanhar P&L real vs. simulação
+- Identificar padrões de pausa
+- Evitar "metas falsas" quando não operou
 
 ### **Otimização de Estratégia**
 - Comparar performance entre gestões
@@ -178,6 +208,6 @@ ls data/trading\ ops/*/*/daily\ ops/signals_*.csv
 
 ---
 
-**Desenvolvido para otimizar análise de trading com simulação realista do fluxo operacional.**
+**Desenvolvido para otimizar análise de trading com simulação realista do fluxo operacional e controle de operação real.**
 
-*Dashboard integrado ao Telegram Signal Collector - Versão 1.0* 
+*Dashboard integrado ao Telegram Signal Collector - Versão 2.1* ⭐ 

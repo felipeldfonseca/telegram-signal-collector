@@ -346,8 +346,11 @@ class DailyConsolidator:
         
         # Estatísticas gerais
         total_signals = len(df_final)
-        wins = len(df_final[df_final['result'] == 'W'])
-        losses = len(df_final[df_final['result'] == 'L'])
+        # Conforme estratégias: apenas 1ª tentativa e G1 são wins, G2+ são losses
+        first_attempt_wins = len(df_final[(df_final['result'] == 'W') & (df_final['attempt'] == 1)])
+        g1_wins = len(df_final[(df_final['result'] == 'W') & (df_final['attempt'] == 2)])
+        wins = first_attempt_wins + g1_wins  # Apenas 1ª tentativa + G1
+        losses = len(df_final[df_final['result'] == 'L']) + len(df_final[(df_final['result'] == 'W') & (df_final['attempt'] == 3)])  # Losses + G2
         win_rate = wins / total_signals * 100
         
         print(f"📊 RESUMO GERAL:")
@@ -367,28 +370,29 @@ class DailyConsolidator:
             print(f"   G1 recovery: {g1_wins} ({g1_wins/total_signals*100:.1f}%)")
             print(f"   G2 recovery: {g2_wins} ({g2_wins/total_signals*100:.1f}%)")
         
-        # Por ativo
+        # Por ativo (conforme estratégias: apenas 1ª tentativa + G1 são wins)
         print(f"\n💰 PERFORMANCE POR ATIVO:")
         for asset in sorted(df_final['asset'].unique()):
             asset_data = df_final[df_final['asset'] == asset]
-            asset_wins = len(asset_data[asset_data['result'] == 'W'])
-            asset_losses = len(asset_data[asset_data['result'] == 'L'])
+            asset_first_wins = len(asset_data[(asset_data['result'] == 'W') & (asset_data['attempt'] == 1)])
+            asset_g1_wins = len(asset_data[(asset_data['result'] == 'W') & (asset_data['attempt'] == 2)])
+            asset_wins = asset_first_wins + asset_g1_wins  # Apenas 1ª tentativa + G1
+            asset_losses = len(asset_data[asset_data['result'] == 'L']) + len(asset_data[(asset_data['result'] == 'W') & (asset_data['attempt'] >= 3)])
             asset_total = len(asset_data)
             asset_wr = asset_wins / asset_total * 100 if asset_total > 0 else 0
             
             print(f"   {asset}: {asset_wins}W/{asset_losses}L ({asset_wr:.1f}%) - {asset_total} total")
         
-        # Distribuição temporal
+        # Distribuição temporal (conforme estratégias: apenas 1ª tentativa + G1 são wins)
         print(f"\n⏰ DISTRIBUIÇÃO POR HORA:")
         df_final['hour'] = pd.to_datetime(df_final['timestamp']).dt.hour
-        hourly = df_final.groupby('hour').agg({
-            'result': ['count', lambda x: (x == 'W').sum()]
-        }).round(1)
         
         for hour in sorted(df_final['hour'].unique()):
             hour_data = df_final[df_final['hour'] == hour]
             hour_total = len(hour_data)
-            hour_wins = len(hour_data[hour_data['result'] == 'W'])
+            hour_first_wins = len(hour_data[(hour_data['result'] == 'W') & (hour_data['attempt'] == 1)])
+            hour_g1_wins = len(hour_data[(hour_data['result'] == 'W') & (hour_data['attempt'] == 2)])
+            hour_wins = hour_first_wins + hour_g1_wins  # Apenas 1ª tentativa + G1
             hour_wr = hour_wins / hour_total * 100 if hour_total > 0 else 0
             
             print(f"   {hour:02d}:00-{hour:02d}:59: {hour_total} sinais ({hour_wr:.1f}% WR)")

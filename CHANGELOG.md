@@ -1,5 +1,51 @@
 # 📋 CHANGELOG - Telegram Signal Collector
 
+## 🚀 [v2.1.0] - 2025-06-28 - Correções Críticas e Novos Recursos
+
+### 🎯 **Melhorias no Daily Trading System:**
+- **⏱️ Análise otimizada**: Mudança de 2 horas para 1 hora na análise pré-trading
+- **📊 Formato melhorado**: Separação de G2 e STOP no output ("G2: #% | STOP: #% | Win rate: #%")
+- **🚨 Alerta de risco**: Detecção automática de 3 perdas consecutivas na última hora
+- **🛡️ Pergunta de segurança**: Confirmação se mercado está inoperável para override manual
+
+### 🔧 **Correções Fundamentais:**
+- **✅ Win Rate corrigido**: Apenas 1ª tentativa + G1 são wins (G2 e STOP são losses)
+- **🎯 Lógica unificada**: Padronização de critérios entre daily_trading_system.py e dashboard.py
+- **🏗️ Estrutura corrigida**: Remoção de referências a G3/G4+ (sistema vai até G2 máximo)
+- **📈 G1 Rate corrigido**: Cálculo relativo = (G1 wins / max(1, total - 1ª wins)) * 100
+
+### 🎮 **Dashboard - Controle de Operação Real:**
+- **📊 Status de operação**: "Não definido" / "Sim, operei" / "Não, pausei"
+- **💰 P&L real**: Diferenciação entre simulação teórica e operação real
+- **🎯 Estratégia manual**: Seleção da estratégia usada quando operou
+- **⏸️ Motivo de pausa**: Campo para justificar pausas operacionais
+- **❌ Anti-falsos positivos**: Evita "meta atingida" quando usuário pausou
+
+### 🐛 **Correções Técnicas:**
+- **AttributeError**: Importação correta de StrategyType no daily_trading_system.py
+- **ValueError**: Correção de index mismatch no dashboard (reset_index(drop=True))
+- **🔄 Inconsistência**: Resolução de divergências entre script e dashboard
+- **📊 Dashboard accuracy**: Correção de cálculos de win rate em todas as seções
+
+### 📊 **Critérios Unificados de Recomendação:**
+```python
+# Padronização em todos os sistemas:
+- Total < 10: PAUSE (dados insuficientes)
+- G2+STOP > 30%: PAUSE (condições desfavoráveis)  
+- G1 recovery > 65%: MARTINGALE CONSERVATIVE
+- 1ª attempt > 60%: INFINITY CONSERVATIVE
+- Default: INFINITY CONSERVATIVE
+```
+
+### 📁 **Arquivos Modificados:**
+- `daily_trading_system.py`: 4 melhorias principais + unificação de lógica
+- `dashboard.py`: Controle de operação real + correções + lógica unificada
+- `consolidate_daily_data.py`: Correção win rate + remoção G3+ refs
+- `collector/parser.py`: Correção win rate + remoção G3+ refs
+- `collect_historical_data.py`: Correção win rate + remoção G3+ refs
+
+---
+
 ## 🚀 [v2.0.0] - 2025-06-27 - Sistema Adaptativo Completo
 
 ### ✨ **Novos Recursos:**

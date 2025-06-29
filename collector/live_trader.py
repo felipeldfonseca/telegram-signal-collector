@@ -30,7 +30,7 @@ class LiveTrader:
         self.storage = Storage(config)
         self.adaptive_strategy = AdaptiveStrategy(config)
         
-        # Buffer de sinais (últimas 2 horas para análise)
+        # Buffer de sinais (última 1 hora para análise)
         self.signal_buffer: deque = deque(maxlen=200)  # ~200 sinais = 2h de dados
         
         # Controle de horários

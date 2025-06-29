@@ -128,9 +128,11 @@ async def collect_full_day_data():
             print("\n📈 ESTATÍSTICAS COMPLETAS DO DIA:")
             print("-" * 50)
             
-            # Agrupar por resultado
-            wins = [s for s in signals if s.result == 'W']
-            losses = [s for s in signals if s.result == 'L']
+            # Agrupar por resultado (conforme estratégias: apenas 1ª tentativa + G1 são wins)
+            first_attempt_wins = [s for s in signals if s.result == 'W' and s.attempt == 1]
+            g1_wins = [s for s in signals if s.result == 'W' and s.attempt == 2]
+            wins = first_attempt_wins + g1_wins  # Apenas 1ª tentativa + G1
+            losses = [s for s in signals if s.result == 'L'] + [s for s in signals if s.result == 'W' and s.attempt == 3]  # Losses + G2
             
             print(f"📊 Total de sinais: {len(signals)}")
             print(f"✅ Wins: {len(wins)} ({len(wins)/len(signals)*100:.1f}%)")
@@ -150,16 +152,22 @@ async def collect_full_day_data():
             assets = {}
             for signal in signals:
                 if signal.asset not in assets:
-                    assets[signal.asset] = {'wins': 0, 'losses': 0}
-                if signal.result == 'W':
-                    assets[signal.asset]['wins'] += 1
+                    assets[signal.asset] = {'first_wins': 0, 'g1_wins': 0, 'losses': 0}
+                
+                # Conforme estratégias: apenas 1ª tentativa e G1 são wins
+                if signal.result == 'W' and signal.attempt == 1:
+                    assets[signal.asset]['first_wins'] += 1
+                elif signal.result == 'W' and signal.attempt == 2:
+                    assets[signal.asset]['g1_wins'] += 1
                 else:
+                    # Losses reais + G2 (consideramos como losses)
                     assets[signal.asset]['losses'] += 1
             
             for asset, stats in sorted(assets.items()):
-                total = stats['wins'] + stats['losses']
-                win_rate = stats['wins'] / total * 100 if total > 0 else 0
-                print(f"   {asset}: {stats['wins']}W/{stats['losses']}L ({win_rate:.1f}%)")
+                wins = stats['first_wins'] + stats['g1_wins']  # Apenas 1ª tentativa + G1
+                total = wins + stats['losses']
+                win_rate = wins / total * 100 if total > 0 else 0
+                print(f"   {asset}: {wins}W/{stats['losses']}L ({win_rate:.1f}%)")
             
             # Análise temporal por hora
             print(f"\n⏰ DISTRIBUIÇÃO TEMPORAL:")
@@ -167,16 +175,22 @@ async def collect_full_day_data():
             for signal in signals:
                 hour = signal.timestamp.hour
                 if hour not in hourly:
-                    hourly[hour] = {'wins': 0, 'losses': 0}
-                if signal.result == 'W':
-                    hourly[hour]['wins'] += 1
+                    hourly[hour] = {'first_wins': 0, 'g1_wins': 0, 'losses': 0}
+                
+                # Conforme estratégias: apenas 1ª tentativa e G1 são wins
+                if signal.result == 'W' and signal.attempt == 1:
+                    hourly[hour]['first_wins'] += 1
+                elif signal.result == 'W' and signal.attempt == 2:
+                    hourly[hour]['g1_wins'] += 1
                 else:
+                    # Losses reais + G2 (consideramos como losses)
                     hourly[hour]['losses'] += 1
             
             for hour in sorted(hourly.keys()):
                 stats = hourly[hour]
-                total = stats['wins'] + stats['losses']
-                win_rate = stats['wins'] / total * 100 if total > 0 else 0
+                wins = stats['first_wins'] + stats['g1_wins']  # Apenas 1ª tentativa + G1
+                total = wins + stats['losses']
+                win_rate = wins / total * 100 if total > 0 else 0
                 print(f"   {hour:02d}:00-{hour:02d}:59: {total} sinais ({win_rate:.1f}% win rate)")
             
             # Últimos sinais
@@ -219,7 +233,7 @@ async def analyze_full_day_conditions(signals):
     conditions = adaptive.analyze_market_conditions(signals)
     print(f"   {conditions}")
     
-    # Análise por períodos de 2 horas
+    # Análise por períodos de 1 hora
     if len(signals) >= 20:
         print("\n📈 ANÁLISE POR PERÍODOS (2h cada):")
         print("-" * 50)
@@ -239,8 +253,8 @@ async def analyze_full_day_conditions(signals):
                 period_conditions = adaptive.analyze_market_conditions(period_signals)
                 print(f"      {period_conditions}")
     
-    # Análise das últimas 2 horas (mais relevante para previsão)
-    print("\n🔮 ANÁLISE DAS ÚLTIMAS 2 HORAS (MAIS RELEVANTE):")
+    # Análise da última 1 hora (mais relevante para previsão)
+    print("\n🔮 ANÁLISE DA ÚLTIMA 1 HORA (MAIS RELEVANTE):")
     print("-" * 50)
     
     now = datetime.now(config.timezone)
@@ -280,8 +294,11 @@ async def analyze_full_day_conditions(signals):
             first_half = recent_signals[:len(recent_signals)//2]
             second_half = recent_signals[len(recent_signals)//2:]
             
-            first_win_rate = len([s for s in first_half if s.result == 'W']) / len(first_half) * 100
-            second_win_rate = len([s for s in second_half if s.result == 'W']) / len(second_half) * 100
+            # Conforme estratégias: apenas 1ª tentativa e G1 são wins
+            first_wins = len([s for s in first_half if (s.result == 'W' and s.attempt in [1, 2])])
+            second_wins = len([s for s in second_half if (s.result == 'W' and s.attempt in [1, 2])])
+            first_win_rate = first_wins / len(first_half) * 100
+            second_win_rate = second_wins / len(second_half) * 100
             
             trend = second_win_rate - first_win_rate
             
