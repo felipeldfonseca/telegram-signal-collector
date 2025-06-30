@@ -10,27 +10,27 @@ class RegexPatterns:
     """Padrões regex para identificar sinais de trading."""
     
     def __init__(self):
-        # Win 1ª tentativa (com ou sem **)
+        # Win 1ª tentativa - suporta ambos formatos: `ASSET` e **WIN em ASSET**
         self.win_1st: Pattern = re.compile(
-            r'✅\s*\*?\*?\s*WIN\s+em\s*`([A-Z]+/[A-Z]+)`\s*\*?\*?\s*✅',
+            r'✅\s*(?:\*\*WIN\s+em\s+([A-Z]+/[A-Z]+)\*\*|WIN\s+em\s*`([A-Z]+/[A-Z]+)`)\s*✅',
             re.IGNORECASE | re.MULTILINE
         )
         
-        # Win 2ª tentativa (G1) (com ou sem **)
+        # Win 2ª tentativa (G1) - suporta ambos formatos
         self.win_2nd: Pattern = re.compile(
-            r'✅\s*\*?\*?\s*WIN\s*\(G1\)\s+em\s*`([A-Z]+/[A-Z]+)`\s*\*?\*?\s*✅',
+            r'✅\s*(?:\*\*WIN\s*\(G1\)\s+em\s+([A-Z]+/[A-Z]+)\*\*|WIN\s*\(G1\)\s+em\s*`([A-Z]+/[A-Z]+)`)\s*✅',
             re.IGNORECASE | re.MULTILINE
         )
         
-        # Win 3ª tentativa (G2) (com ou sem **)
+        # Win 3ª tentativa (G2) - suporta ambos formatos
         self.win_3rd: Pattern = re.compile(
-            r'✅\s*\*?\*?\s*WIN\s*\(G2\)\s+em\s*`([A-Z]+/[A-Z]+)`\s*\*?\*?\s*✅',
+            r'✅\s*(?:\*\*WIN\s*\(G2\)\s+em\s+([A-Z]+/[A-Z]+)\*\*|WIN\s*\(G2\)\s+em\s*`([A-Z]+/[A-Z]+)`)\s*✅',
             re.IGNORECASE | re.MULTILINE
         )
         
-        # Loss/Stop após 3 tentativas (com ou sem **)
+        # Loss/Stop após 3 tentativas - suporta ambos formatos
         self.loss: Pattern = re.compile(
-            r'❎\s*\*?\*?\s*STOP\s+em\s*`([A-Z]+/[A-Z]+)`\s*\*?\*?\s*❎',
+            r'❎\s*(?:\*\*STOP\s+em\s+([A-Z]+/[A-Z]+)\*\*|STOP\s+em\s*`([A-Z]+/[A-Z]+)`)\s*❎',
             re.IGNORECASE | re.MULTILINE
         )
         
@@ -75,7 +75,8 @@ class RegexPatterns:
         for pattern_name, pattern_info in self.patterns.items():
             match = pattern_info['pattern'].search(text)
             if match:
-                asset = match.group(1).upper()
+                # Pegar o asset do grupo que não é None (formato `ASSET` ou **ASSET**)
+                asset = (match.group(1) or match.group(2)).upper()
                 result = pattern_info['result']
                 attempt = pattern_info['attempt']
                 
@@ -133,4 +134,4 @@ def find_signal(text: str) -> tuple[str, int | None, str] | None:
 
 if __name__ == "__main__":
     # Executar testes quando rodado diretamente
-    patterns.test_patterns() 
+    patterns.test_patterns()

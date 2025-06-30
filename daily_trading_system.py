@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from collector import Config, AdaptiveStrategy, Storage, LiveTrader
 from collector.runner import Runner
-from collector.parser import Signal
+from collector.parser import Signal, HistoricalParser
 from collector.regex import find_signal
 from collector.adaptive_strategy import StrategyType
 
@@ -70,9 +70,10 @@ class DailyTradingSystem:
             
             print(f"🕐 Período: {today_start.strftime('%H:%M')} até {now.strftime('%H:%M')}")
             
-            # Coletar mensagens
+            # Coletar mensagens usando HistoricalParser
             print("🔍 Coletando mensagens...")
             entity = await runner.get_chat_entity()
+            parser = HistoricalParser(self.config)
             
             signals = []
             message_count = 0
@@ -87,18 +88,10 @@ class DailyTradingSystem:
                 
                 message_count += 1
                 
-                # Parse sem filtro de horário
-                if message.text:
-                    signal_data = find_signal(message.text)
-                    if signal_data:
-                        result, attempt, asset = signal_data
-                        signal = Signal(
-                            timestamp=local_time,
-                            asset=asset,
-                            result=result,
-                            attempt=attempt
-                        )
-                        signals.append(signal)
+                # Parse sem filtro de horário usando HistoricalParser
+                signal = parser.parse_message_no_time_filter(message)
+                if signal:
+                    signals.append(signal)
             
             print(f"✅ Processadas {message_count} mensagens")
             print(f"🎯 Encontrados {len(signals)} sinais")
@@ -341,4 +334,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

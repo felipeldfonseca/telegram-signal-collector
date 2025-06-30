@@ -40,9 +40,10 @@ class Signal:
 class SignalParser:
     """Parser de sinais de trading do Telegram."""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, skip_time_filter: bool = False):
         self.config = config
         self.timezone = config.timezone
+        self.skip_time_filter = skip_time_filter
         
     def parse_manual_history(self, file_path: str) -> List[Signal]:
         """
@@ -318,8 +319,8 @@ class SignalParser:
             # Converter para timezone do Brasil
             local_timestamp = timestamp.astimezone(self.timezone)
             
-            # Validar se está no horário de operação
-            if not self._is_valid_time(local_timestamp):
+            # Validar se está no horário de operação (apenas se não for skip_time_filter)
+            if not self.skip_time_filter and not self._is_valid_time(local_timestamp):
                 logger.debug(f"Sinal fora do horário de operação: {local_timestamp}")
                 return None
             
@@ -480,4 +481,55 @@ class SignalParser:
             print(f"  G{attempt}: {count}")
         
         print(f"\n⏰ Período: {stats['period']['start'].strftime('%H:%M:%S')} - {stats['period']['end'].strftime('%H:%M:%S')}")
-        print("=" * 40) 
+        print("=" * 40)
+
+
+class HistoricalParser(SignalParser):
+    """Parser otimizado para coleta histórica sem filtro de horário."""
+    
+    def __init__(self, config: Config):
+        # Sempre inicializar com skip_time_filter=True para coleta histórica
+        super().__init__(config, skip_time_filter=True)
+    
+    def parse_message_no_time_filter(self, message) -> Optional[Signal]:
+        """
+        Parse mensagem SEM filtro de horário - para coleta histórica completa.
+        
+        Args:
+            message: Mensagem do Telegram
+            
+        Returns:
+            Signal ou None
+        """
+        try:
+            if not message.text:
+                return None
+            
+            # Extrair sinal usando regex
+            signal_data = find_signal(message.text)
+            if not signal_data:
+                return None
+            
+            result, attempt, asset = signal_data
+            
+            # Converter timestamp
+            timestamp = message.date
+            if timestamp.tzinfo is None:
+                timestamp = pytz.UTC.localize(timestamp)
+            
+            local_timestamp = timestamp.astimezone(self.timezone)
+            
+            # Criar signal SEM validação de horário
+            signal = Signal(
+                timestamp=local_timestamp,
+                asset=asset,
+                result=result,
+                attempt=attempt
+            )
+            
+            logger.debug(f"Sinal histórico encontrado: {signal}")
+            return signal
+            
+        except Exception as e:
+            logger.error(f"Erro ao processar mensagem histórica: {e}")
+            return None

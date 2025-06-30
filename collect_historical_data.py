@@ -15,58 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from collector import Config, AdaptiveStrategy, Storage
 from collector.runner import Runner
-from collector.parser import Signal
+from collector.parser import Signal, HistoricalParser
 from collector.regex import find_signal
-
-
-class FullDayParser:
-    """Parser que coleta sinais de qualquer horário."""
-    
-    def __init__(self, config: Config):
-        self.config = config
-        self.timezone = config.timezone
-    
-    def parse_message_no_time_filter(self, message) -> Signal:
-        """
-        Parse mensagem SEM filtro de horário.
-        
-        Args:
-            message: Mensagem do Telegram
-            
-        Returns:
-            Signal ou None
-        """
-        try:
-            if not message.text:
-                return None
-            
-            # Extrair sinal usando regex
-            signal_data = find_signal(message.text)
-            if not signal_data:
-                return None
-            
-            result, attempt, asset = signal_data
-            
-            # Converter timestamp
-            timestamp = message.date
-            if timestamp.tzinfo is None:
-                timestamp = pytz.UTC.localize(timestamp)
-            
-            local_timestamp = timestamp.astimezone(self.timezone)
-            
-            # Criar signal SEM validação de horário
-            signal = Signal(
-                timestamp=local_timestamp,
-                asset=asset,
-                result=result,
-                attempt=attempt
-            )
-            
-            return signal
-            
-        except Exception as e:
-            print(f"Erro ao processar mensagem: {e}")
-            return None
 
 
 async def collect_full_day_data():
@@ -78,7 +28,7 @@ async def collect_full_day_data():
     config.setup_logging()
     runner = Runner(config)
     storage = Storage(config)
-    parser = FullDayParser(config)
+    parser = HistoricalParser(config)
     
     try:
         # Conectar ao Telegram
@@ -377,4 +327,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())
