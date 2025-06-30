@@ -98,4 +98,7 @@ target/
 # mypy
 .mypy_cache/
 .dmypy.json
-dmypy.json 
+dmypy.json
+
+# Planilhas Excel
+excel/ 
