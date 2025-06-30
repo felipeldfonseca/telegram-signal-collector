@@ -77,8 +77,7 @@ class DailyTradingSystem:
             signals = []
             message_count = 0
             
-            # Coletar todo o histórico do dia sem limitar a 500 mensagens
-            async for message in runner.client.iter_messages(entity, limit=None):
+            async for message in runner.client.iter_messages(entity, limit=500):
                 local_time = message.date.astimezone(self.config.timezone)
                 
                 if local_time < today_start:

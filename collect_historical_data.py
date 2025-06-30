@@ -99,9 +99,7 @@ async def collect_full_day_data():
         signals = []
         message_count = 0
         
-        # Buscar todas as mensagens disponíveis (até o início do dia)
-        # `limit=None` instruirá o Telethon a paginar automaticamente sem restrição
-        async for message in runner.client.iter_messages(entity, limit=None):
+        async for message in runner.client.iter_messages(entity, limit=500):
             # Verificar se está no período
             local_time = message.date.astimezone(config.timezone)
             
