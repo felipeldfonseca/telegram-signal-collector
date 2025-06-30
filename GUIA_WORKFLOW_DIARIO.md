@@ -102,7 +102,6 @@ data/trading ops/June/28/
 ### 📜 **Scripts Auxiliares Disponíveis:**
 ```
 collect_historical_data.py          # Coleta apenas histórica (sem trading)
-analyze_excel.py                     # Análise de performance no Excel
 main_adaptive.py                     # Sistema adaptativo standalone
 consolidate_daily_data.py            # Consolida dados do dia (execute à meia-noite)
 ```

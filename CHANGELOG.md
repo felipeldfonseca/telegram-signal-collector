@@ -1,5 +1,22 @@
 # 📋 CHANGELOG - Telegram Signal Collector
 
+## 🧹 [v2.1.1] - 2025-01-15 - Limpeza do Repositório
+
+### ❌ **Arquivos Removidos:**
+- `analyze_excel.py` → Não essencial para o workflow principal (análise manual de planilha)
+- `excel/` → Pasta com cópia estática da planilha pessoal do usuário
+
+### 📝 **Documentação Atualizada:**
+- `GUIA_WORKFLOW_DIARIO.md` → Removidas referências aos scripts auxiliares desnecessários
+- `CHANGELOG.md` → Limpeza de referências aos arquivos removidos
+
+### 💡 **Motivo da Remoção:**
+- **analyze_excel.py**: Script independente que analisava apenas uma cópia estática da planilha pessoal
+- **excel/**: Pasta desnecessária que exigiria atualizações manuais constantes
+- **Workflow simplificado**: Dashboard já oferece todas as análises necessárias de forma mais completa
+
+---
+
 ## 🚀 [v2.1.0] - 2025-06-28 - Correções Críticas e Novos Recursos
 
 ### 🎯 **Melhorias no Daily Trading System:**
@@ -73,12 +90,10 @@
 - `main.py` → Substituído por `daily_trading_system.py`
 - `instructions.md` → Substituído por `GUIA_WORKFLOW_DIARIO.md`
 - `collect_and_analyze_today.py` → Funcionalidade integrada no sistema principal
-- `analyze_excel_corrected.py` → Renomeado para `analyze_excel.py`
 
 #### 🔄 **Arquivos Renomeados:**
 - `README_ADAPTATIVO.md` → `README.md` (README principal)
 - `collect_and_analyze_today_full.py` → `collect_historical_data.py`
-- `analyze_excel_corrected.py` → `analyze_excel.py`
 
 #### 📁 **Estrutura Final:**
 ```
@@ -88,10 +103,8 @@ Telegram Signal Collector/
 ├── daily_trading_system.py     # ← ⭐ SCRIPT PRINCIPAL
 ├── main_adaptive.py            # ← Sistema standalone
 ├── collect_historical_data.py  # ← Coleta histórica
-├── analyze_excel.py            # ← Análise Excel
 ├── collector/                  # ← Módulos core
 ├── docs/                       # ← Análises e documentação
-├── excel/                      # ← Dados de performance
 ├── data/                       # ← Dados coletados
 └── notebooks/                  # ← Análise exploratória
 ```
