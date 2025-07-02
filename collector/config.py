@@ -10,7 +10,9 @@ import pytz
 from dotenv import load_dotenv
 
 # Carrega variáveis de ambiente
-load_dotenv()
+# Força o caminho do .env para garantir que seja encontrado
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(dotenv_path=dotenv_path)
 
 
 class Config:
@@ -18,10 +20,10 @@ class Config:
     
     def __init__(self):
         # Telegram API
-        self.api_id = int(os.getenv('TG_API_ID', '0'))
-        self.api_hash = os.getenv('TG_API_HASH', '')
+        self.api_id = os.getenv('TG_API_ID')
+        self.api_hash = os.getenv('TG_API_HASH')
         self.session_name = os.getenv('TG_SESSION', 'telegram_session')
-        self.group_name = os.getenv('TG_GROUP', '')
+        self.group_name = os.getenv('TG_GROUP', 'https://t.me/+Nsw0tHsIhbNhNDkx')
         
         # PostgreSQL
         self.pg_dsn = os.getenv('PG_DSN', '')
@@ -44,11 +46,11 @@ class Config:
     
     def _validate_config(self) -> None:
         """Valida configurações obrigatórias."""
-        if not self.api_id or self.api_id == 0:
-            raise ValueError("TG_API_ID é obrigatório")
+        if not self.api_id:
+            raise ValueError("TG_API_ID é obrigatório e não está no .env")
         
         if not self.api_hash:
-            raise ValueError("TG_API_HASH é obrigatório")
+            raise ValueError("TG_API_HASH é obrigatório e não está no .env")
         
         if not self.group_name:
             raise ValueError("TG_GROUP é obrigatório")

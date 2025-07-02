@@ -41,8 +41,14 @@ env/
 *.session-journal
 
 # Data Files
-data/
-*.csv
+# Ignorando tudo em 'data/', exceto arquivos .csv
+data/*
+!data/*.csv
+data/json/
+data/legacy/
+data/research/
+data/trading ops/
+
 *.db
 *.sqlite
 *.sqlite3

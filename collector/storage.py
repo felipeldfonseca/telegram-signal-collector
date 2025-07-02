@@ -23,8 +23,10 @@ class Storage:
     def __init__(self, config: Config):
         self.config = config
         self.timezone = config.timezone
-        
+    
     def save_to_csv(self, signals: List[Signal], date: Optional[datetime] = None) -> str:
+        import sys
+        sys.stderr.write(f"=== WORKDIR: {os.getcwd()}\n")
         """
         Salva sinais em arquivo CSV.
         
@@ -48,6 +50,7 @@ class Storage:
         # Nome do arquivo
         filename = f"signals_{date.strftime('%Y-%m-%d')}.csv"
         filepath = os.path.join("data", filename)
+        sys.stderr.write(f"=== CSV PATH: {os.path.abspath(filepath)}\n")
         
         # Criar diretório se não existir
         os.makedirs("data", exist_ok=True)
