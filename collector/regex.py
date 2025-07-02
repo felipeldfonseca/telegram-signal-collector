@@ -28,9 +28,13 @@ class RegexPatterns:
             re.IGNORECASE | re.MULTILINE
         )
         
-        # Loss/Stop após 3 tentativas - suporta ambos formatos
+        # Loss/Stop - Suporta vários formatos, incluindo `ASSET`, **ASSET**, e combinações de bold.
         self.loss: Pattern = re.compile(
-            r'❎\s*(?:\*\*STOP\s+em\s+([A-Z]+/[A-Z]+)\*\*|STOP\s+em\s*`([A-Z]+/[A-Z]+)`)\s*❎',
+            r'❎\s*(?:\*\*STOP\s+em\s+`([A-Z]+/[A-Z]+)`\*\*|'  # Formato: **STOP em `ASSET`**
+            r'\*\*STOP\s+em\s+([A-Z]+/[A-Z]+)\*\*|'             # Formato: **STOP em ASSET**
+            r'STOP\s+em\s+`([A-Z]+/[A-Z]+)`|'                   # Formato: STOP em `ASSET`
+            r'STOP\s+em\s+([A-Z]+/[A-Z]+))'                     # Formato: STOP em ASSET
+            r'\s*❎',
             re.IGNORECASE | re.MULTILINE
         )
         
@@ -75,8 +79,12 @@ class RegexPatterns:
         for pattern_name, pattern_info in self.patterns.items():
             match = pattern_info['pattern'].search(text)
             if match:
-                # Pegar o asset do grupo que não é None (formato `ASSET` ou **ASSET**)
-                asset = (match.group(1) or match.group(2)).upper()
+                # Encontra o primeiro grupo de captura que não é None
+                asset = next((g for g in match.groups() if g is not None), None)
+                if not asset:
+                    continue
+
+                asset = asset.upper()
                 result = pattern_info['result']
                 attempt = pattern_info['attempt']
                 
@@ -91,6 +99,8 @@ class RegexPatterns:
             ("✅ WIN (G1) em `BTC/USDT` ✅", ('W', 2, 'BTC/USDT')),
             ("✅ WIN (G2) em `ETH/USDT` ✅", ('W', 3, 'ETH/USDT')),
             ("❎ STOP em `DOT/USDT` ❎", ('L', None, 'DOT/USDT')),
+            ("❎ STOP em BTC/USDT ❎", ('L', None, 'BTC/USDT')),
+            ("❎ **STOP em `BTC/USDT`** ❎", ('L', None, 'BTC/USDT')),
             # Casos com espaços extras
             ("✅  WIN  em  `SOL/USDT`  ✅", ('W', 1, 'SOL/USDT')),
             ("✅  WIN  (G1)  em  `MATIC/USDT`  ✅", ('W', 2, 'MATIC/USDT')),
