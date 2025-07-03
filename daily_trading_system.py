@@ -99,10 +99,6 @@ class DailyTradingSystem:
             # Salvar dados
             if signals:
                 print("💾 Salvando dados históricos...")
-                # Debug info: show now and signal timestamps
-                print(f"[DEBUG] now: {now} (type: {type(now)})")
-                print(f"[DEBUG] signal min timestamp: {min([s.timestamp for s in signals]) if signals else 'N/A'}")
-                print(f"[DEBUG] signal max timestamp: {max([s.timestamp for s in signals]) if signals else 'N/A'}")
                 self.storage.save_to_csv(signals, now)
                 
                 # Estatísticas rápidas (conforme estratégias: apenas 1ª tentativa + G1 são wins)

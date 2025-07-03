@@ -45,18 +45,20 @@ class MarketConditions:
     total_operations: int
     first_attempt_success_rate: float
     g1_recovery_rate: float
-    g2_plus_stop_rate: float
+    g2_rate: float
+    stop_rate: float
+    win_rate: float
     recommended_strategy: StrategyType
-    confidence_level: float
     analysis_period: str
     
     def __str__(self) -> str:
-        return (f"🔍 Análise {self.analysis_period}: {self.total_operations} ops | "
+        return (f"🔍 {self.analysis_period}: {self.total_operations} ops | "
+                f"Win Rate: {self.win_rate:.1f}% | "
                 f"1ª: {self.first_attempt_success_rate:.1f}% | "
                 f"G1: {self.g1_recovery_rate:.1f}% | "
-                f"G2+STOP: {self.g2_plus_stop_rate:.1f}% | "
-                f"Estratégia: {self.recommended_strategy.value.upper()} "
-                f"(Confiança: {self.confidence_level:.1f}%)")
+                f"G2: {self.g2_rate:.1f}% | "
+                f"STOP: {self.stop_rate:.1f}% | "
+                f"Estratégia: {self.recommended_strategy.value.upper()}")
 
 
 class AdaptiveStrategy:
@@ -113,9 +115,10 @@ class AdaptiveStrategy:
                 total_operations=0,
                 first_attempt_success_rate=0.0,
                 g1_recovery_rate=0.0,
-                g2_plus_stop_rate=0.0,
+                g2_rate=0.0,
+                stop_rate=0.0,
+                win_rate=0.0,
                 recommended_strategy=StrategyType.PAUSE,
-                confidence_level=0.0,
                 analysis_period="Sem dados"
             )
         
@@ -126,15 +129,24 @@ class AdaptiveStrategy:
         total_ops = len(operations)
         first_attempt_wins = sum(1 for op in operations if op['result'] == 'W' and op['attempts'] == 1)
         g1_recoveries = sum(1 for op in operations if op['result'] == 'W' and op['attempts'] == 2)
-        g2_plus_stops = sum(1 for op in operations if op['attempts'] >= 3)
+        g2_wins = sum(1 for op in operations if op['result'] == 'W' and op['attempts'] == 3)
+        stops = sum(1 for op in operations if op['result'] == 'L')
         
         # Calcular taxas
         first_attempt_rate = (first_attempt_wins / total_ops * 100) if total_ops > 0 else 0
         g1_recovery_rate = (g1_recoveries / max(1, total_ops - first_attempt_wins) * 100) if total_ops > first_attempt_wins else 0
-        g2_plus_stop_rate = (g2_plus_stops / total_ops * 100) if total_ops > 0 else 0
+        g2_rate = (g2_wins / total_ops * 100) if total_ops > 0 else 0
+        stop_rate = (stops / total_ops * 100) if total_ops > 0 else 0
+        
+        # Win rate (1ª tentativa + G1)
+        total_wins = first_attempt_wins + g1_recoveries
+        win_rate = (total_wins / total_ops * 100) if total_ops > 0 else 0
+        
+        # Taxa de G2+STOP para tomada de decisão
+        g2_plus_stop_rate = g2_rate + stop_rate
         
         # Determinar estratégia recomendada
-        recommended_strategy, confidence = self._determine_strategy(
+        recommended_strategy, _ = self._determine_strategy(
             total_ops, first_attempt_rate, g1_recovery_rate, g2_plus_stop_rate
         )
         
@@ -150,9 +162,10 @@ class AdaptiveStrategy:
             total_operations=total_ops,
             first_attempt_success_rate=first_attempt_rate,
             g1_recovery_rate=g1_recovery_rate,
-            g2_plus_stop_rate=g2_plus_stop_rate,
+            g2_rate=g2_rate,
+            stop_rate=stop_rate,
+            win_rate=win_rate,
             recommended_strategy=recommended_strategy,
-            confidence_level=confidence,
             analysis_period=period
         )
     

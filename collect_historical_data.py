@@ -70,6 +70,9 @@ async def collect_full_day_data():
         print(f"🎯 Encontrados {len(signals)} sinais")
         
         if signals:
+            # Ordenar sinais por timestamp (do mais antigo para o mais novo)
+            signals.sort(key=lambda s: s.timestamp)
+            
             # Salvar dados
             print("\n💾 Salvando dados...")
             storage.save_to_csv(signals, now)
@@ -147,7 +150,15 @@ async def collect_full_day_data():
             print(f"\n📋 ÚLTIMOS 15 SINAIS:")
             print("-" * 50)
             for signal in signals[-15:]:
-                attempt_str = f"G{signal.attempt}" if signal.attempt else "1ª"
+                if signal.result == 'L':
+                    attempt_str = "STOP"
+                elif signal.attempt == 1:
+                    attempt_str = "1ª Tentativa"
+                elif signal.attempt and signal.attempt > 1:
+                    attempt_str = f"G{signal.attempt - 1}"
+                else:
+                    attempt_str = "N/A"
+                
                 result_str = "✅ WIN" if signal.result == 'W' else "❌ LOSS"
                 print(f"   {signal.timestamp.strftime('%H:%M')} | {signal.asset} | {result_str} | {attempt_str}")
             
@@ -184,22 +195,21 @@ async def analyze_full_day_conditions(signals):
     print(f"   {conditions}")
     
     # Análise por períodos de 1 hora
-    if len(signals) >= 20:
-        print("\n📈 ANÁLISE POR PERÍODOS (2h cada):")
+    if len(signals) >= 10:
+        print("\n📈 ANÁLISE POR PERÍODOS (1h cada):")
         print("-" * 50)
         
         periods = {}
         for signal in signals:
-            period = signal.timestamp.hour // 2 * 2  # 6-8, 8-10, 10-12, etc.
+            period = signal.timestamp.hour
             if period not in periods:
                 periods[period] = []
             periods[period].append(signal)
         
         for period_start in sorted(periods.keys()):
             period_signals = periods[period_start]
-            if len(period_signals) >= 3:
-                period_end = period_start + 2
-                print(f"\n   🕐 {period_start:02d}:00-{period_end:02d}:00 ({len(period_signals)} sinais):")
+            if len(period_signals) >= 2:
+                print(f"\n   🕐 {period_start:02d}:00-{period_start:02d}:59 ({len(period_signals)} sinais):")
                 period_conditions = adaptive.analyze_market_conditions(period_signals)
                 print(f"      {period_conditions}")
     
@@ -208,18 +218,18 @@ async def analyze_full_day_conditions(signals):
     print("-" * 50)
     
     now = datetime.now(config.timezone)
-    two_hours_ago = now - timedelta(hours=2)
+    one_hour_ago = now - timedelta(hours=1)
     
-    recent_signals = [s for s in signals if s.timestamp >= two_hours_ago]
+    recent_signals = [s for s in signals if s.timestamp >= one_hour_ago]
     
     if len(recent_signals) >= 5:
         recent_conditions = adaptive.analyze_market_conditions(recent_signals)
-        print(f"📊 Baseado nos últimos {len(recent_signals)} sinais (últimas 2h):")
+        print(f"📊 Baseado nos últimos {len(recent_signals)} sinais (última 1h):")
         print(f"   {recent_conditions}")
         
         # Recomendação para 17:00-18:00
         strategy = recent_conditions.recommended_strategy
-        confidence = recent_conditions.confidence_level
+        win_rate = recent_conditions.win_rate
         
         print(f"\n🎯 RECOMENDAÇÃO PARA 17:00-18:00:")
         print("-" * 40)
@@ -237,7 +247,7 @@ async def analyze_full_day_conditions(signals):
             print("   💰 ROI esperado: 45.1% mensal")
             print("   🎯 Estrutura: 7 níveis progressivos")
         
-        print(f"   🎲 Confiança: {confidence:.1f}%")
+        print(f"   🎲 Win Rate: {win_rate:.1f}%")
         
         # Análise de tendência
         if len(recent_signals) >= 10:
@@ -264,7 +274,7 @@ async def analyze_full_day_conditions(signals):
                 print(f"   ➡️ Tendência ESTÁVEL ({trend:+.1f}%)")
     
     else:
-        print(f"   ⚠️ Apenas {len(recent_signals)} sinais nas últimas 2h")
+        print(f"   ⚠️ Apenas {len(recent_signals)} sinais nas últimas 1h")
         print("   📊 Usando análise do dia completo para previsão")
         
         if len(signals) >= 10:

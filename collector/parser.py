@@ -33,7 +33,15 @@ class Signal:
         }
     
     def __str__(self) -> str:
-        attempt_str = f"G{self.attempt}" if self.attempt else "STOP"
+        if self.result == 'L':
+            attempt_str = "STOP"
+        elif self.attempt == 1:
+            attempt_str = "1ª Tentativa"
+        elif self.attempt and self.attempt > 1:
+            attempt_str = f"G{self.attempt - 1}"
+        else:
+            attempt_str = "N/A"
+        
         return f"{self.timestamp.strftime('%H:%M:%S')} | {self.asset} | {self.result} | {attempt_str}"
 
 
