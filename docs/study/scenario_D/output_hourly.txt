@@ -1,0 +1,46 @@
+=== 2025-06-27 === P&L +12.00
+  17:00 wins:3 losses:0 P&L:+6.00 (prev WR 81.8%, curr WR 76.9%) | Cum +6.00
+  18:00 PAUSE (prev WR 76.9%, curr WR 73.7%) | Cum +6.00
+  19:00 PAUSE (prev WR 73.7%, curr WR 66.7%) | Cum +6.00
+  20:00 PAUSE (prev WR 66.7%, curr WR 60.0%) | Cum +6.00
+  21:00 PAUSE (prev WR 60.0%, curr WR 81.8%) | Cum +6.00
+  22:00 wins:6 losses:1 P&L:+6.00 (prev WR 81.8%, curr WR 76.5%) | Cum +12.00
+
+=== 2025-06-28 === P&L +0.00
+  17:00 PAUSE (prev WR 57.1%, curr WR 60.0%) | Cum +0.00
+  18:00 PAUSE (prev WR 60.0%, curr WR 76.9%) | Cum +0.00
+  19:00 PAUSE (prev WR 76.9%, curr WR 45.5%) | Cum +0.00
+  20:00 PAUSE (prev WR 45.5%, curr WR 50.0%) | Cum +0.00
+  21:00 PAUSE (prev WR 50.0%, curr WR 44.4%) | Cum +0.00
+  22:00 PAUSE (prev WR 44.4%, curr WR 50.0%) | Cum +0.00
+  23:00 PAUSE (prev WR 50.0%, curr WR 54.5%) | Cum +0.00
+
+=== 2025-06-29 === P&L +12.00
+  17:00 PAUSE (prev WR 57.1%, curr WR 69.2%) | Cum +0.00
+  18:00 PAUSE (prev WR 69.2%, curr WR 84.2%) | Cum +0.00
+  19:00 wins:3 losses:0 P&L:+6.00 (prev WR 84.2%, curr WR 88.2%) | Cum +6.00
+  20:00 wins:3 losses:0 P&L:+6.00 (prev WR 88.2%, curr WR 94.1%) | Cum +12.00
+
+=== 2025-06-30 === P&L +12.00
+  17:00 wins:3 losses:0 P&L:+6.00 (prev WR 80.0%, curr WR 88.9%) | Cum +6.00
+  18:00 wins:3 losses:0 P&L:+6.00 (prev WR 88.9%, curr WR 88.9%) | Cum +12.00
+
+=== 2025-07-01 === P&L -18.00
+  17:00 PAUSE (prev WR 78.9%, curr WR 81.2%) | Cum +0.00
+  18:00 wins:6 losses:1 P&L:+6.00 (prev WR 81.2%, curr WR 87.5%) | Cum +6.00
+  19:00 wins:0 losses:2 P&L:-12.00 (prev WR 87.5%, curr WR 70.6%) | Cum -6.00
+  20:00 PAUSE (prev WR 70.6%, curr WR 53.3%) | Cum -6.00
+  21:00 PAUSE (prev WR 53.3%, curr WR 80.0%) | Cum -6.00
+  22:00 wins:6 losses:4 P&L:-12.00 (prev WR 80.0%, curr WR 68.8%) | Cum -18.00
+  23:00 PAUSE (prev WR 68.8%, curr WR 75.0%) | Cum -18.00
+
+=== 2025-07-02 === P&L +12.00
+  17:00 PAUSE (prev WR 66.7%, curr WR 70.6%) | Cum +0.00
+  18:00 PAUSE (prev WR 70.6%, curr WR 81.2%) | Cum +0.00
+  19:00 wins:3 losses:0 P&L:+6.00 (prev WR 81.2%, curr WR 75.0%) | Cum +6.00
+  20:00 PAUSE (prev WR 75.0%, curr WR 72.2%) | Cum +6.00
+  21:00 PAUSE (prev WR 72.2%, curr WR 62.5%) | Cum +6.00
+  22:00 PAUSE (prev WR 62.5%, curr WR 80.0%) | Cum +6.00
+  23:00 wins:9 losses:2 P&L:+6.00 (prev WR 80.0%, curr WR 75.0%) | Cum +12.00
+
+TOTAL P&L across 6 days: +30.00
